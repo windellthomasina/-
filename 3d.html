@@ -1,0 +1,3461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>只狼 3D：剑圣 苇名一心 — 银月苇荡决斗</title>
+    <!-- 和风字体（含优雅系统回退） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Three.js r128 用于 3D 场景与骨骼动画渲染 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --ink-bg: #06080d;
+            --gold: #d4af37;
+            --crimson: #b91c1c;
+            --parchment: #ece4d4;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--ink-bg);
+            color: var(--parchment);
+            font-family: 'Noto Serif SC', 'Songti SC', serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        .font-calligraphy {
+            font-family: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', serif;
+        }
+
+        #app-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
+            background: #05070c;
+        }
+
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 14px;
+            background: linear-gradient(180deg, rgba(7, 9, 14, 0.96), rgba(7, 9, 14, 0.72));
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+            z-index: 25;
+            flex-shrink: 0;
+        }
+
+        #stage-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        #gl-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 底部控制栏（置于画布之外，适配键鼠与触屏） */
+        #controls-deck {
+            flex-shrink: 0;
+            background: linear-gradient(0deg, #05060a 0%, #0f131c 100%);
+            border-top: 1px solid rgba(212, 175, 55, 0.25);
+            padding: 8px 12px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            z-index: 25;
+        }
+
+        .sekiro-btn {
+            position: relative;
+            background: linear-gradient(180deg, #232936 0%, #11151d 100%);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            border-radius: 8px;
+            color: #f0e8d8;
+            padding: 7px 12px;
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            transition: transform 0.07s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            min-height: 40px;
+        }
+
+        .sekiro-btn:hover {
+            border-color: rgba(246, 212, 110, 0.85);
+            background: linear-gradient(180deg, #2f3749 0%, #181d29 100%);
+            box-shadow: 0 0 14px rgba(212, 175, 55, 0.25);
+        }
+
+        .sekiro-btn:active, .sekiro-btn.active-press {
+            transform: translateY(2px) scale(0.96);
+            border-color: #ffd15c;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), inset 0 2px 6px rgba(0, 0, 0, 0.5);
+        }
+
+        .sekiro-btn-primary {
+            background: linear-gradient(180deg, #91191f 0%, #4c0b0f 100%);
+            border-color: rgba(255, 115, 105, 0.6);
+        }
+        .sekiro-btn-primary:hover {
+            background: linear-gradient(180deg, #ae2027 0%, #611015 100%);
+            box-shadow: 0 0 18px rgba(220, 38, 38, 0.45);
+        }
+
+        .sekiro-btn-deflect {
+            background: linear-gradient(180deg, #564015 0%, #2c1f07 100%);
+            border-color: rgba(255, 206, 86, 0.68);
+        }
+        .sekiro-btn-deflect:hover {
+            background: linear-gradient(180deg, #70541b 0%, #3d2c0b 100%);
+            box-shadow: 0 0 16px rgba(255, 198, 56, 0.42);
+        }
+
+        .kbd-hint {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            color: #cbc2ab;
+            font-family: monospace;
+        }
+
+        /* 3D 视口内 HUD 叠层 */
+        #hud-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        /* 对称扩张架势条 */
+        .posture-frame {
+            position: relative;
+            background: rgba(8, 10, 15, 0.78);
+            border: 1px solid rgba(212, 175, 55, 0.72);
+            border-radius: 2px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
+        }
+        .posture-fill {
+            position: absolute;
+            top: 1px;
+            bottom: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0%;
+            background: #eab308;
+            transition: background-color 0.1s ease;
+        }
+        .posture-center-tick {
+            position: absolute;
+            top: -1px;
+            bottom: -1px;
+            left: 50%;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #fef08a;
+            z-index: 2;
+        }
+
+        @keyframes postureShake {
+            0%, 100% { transform: translate(-50%, 0); }
+            25% { transform: translate(calc(-50% - 2px), 1px); }
+            75% { transform: translate(calc(-50% + 2px), -1px); }
+        }
+        .posture-critical {
+            animation: postureShake 0.1s infinite linear;
+        }
+
+        /* 忍杀脉动红点（3D 坐标实时投影到一心胸口） */
+        #deathblow-dot {
+            position: absolute;
+            width: 58px;
+            height: 58px;
+            transform: translate(-50%, -50%);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 12;
+        }
+        .db-ring {
+            width: 100%;
+            height: 100%;
+            border-radius: 9999px;
+            background: radial-gradient(circle, #ff1e27 0%, rgba(185, 28, 28, 0.75) 45%, rgba(185, 28, 28, 0) 74%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: dbPulse 0.45s infinite alternate ease-in-out;
+        }
+        .db-core {
+            width: 22px;
+            height: 22px;
+            border-radius: 9999px;
+            background: #ff2630;
+            border: 4px solid #09090b;
+            box-shadow: 0 0 18px #ff1e27;
+        }
+        @keyframes dbPulse {
+            from { transform: scale(0.88); }
+            to { transform: scale(1.22); }
+        }
+
+        /* 浮空战斗字 */
+        .float-tag {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            font-weight: 900;
+            white-space: nowrap;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.75);
+            pointer-events: none;
+            transition: opacity 0.15s linear;
+        }
+
+        /* 居中书法大字 */
+        #kanji-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 16;
+        }
+        .kanji-pop {
+            opacity: 0;
+            transform: scale(1.65);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            text-shadow: 0 0 32px rgba(0, 0, 0, 0.95), 0 0 18px rgba(185, 28, 28, 0.85);
+        }
+        .kanji-pop.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* 闪屏氛围层 */
+        #screen-flash {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 14;
+            transition: opacity 0.08s ease-out;
+        }
+
+        /* 模态框 */
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(10, 14, 22, 0.82) 0%, rgba(4, 5, 9, 0.95) 100%);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            padding: 16px;
+        }
+        .modal-card {
+            background: linear-gradient(160deg, rgba(20, 25, 36, 0.96), rgba(9, 11, 17, 0.98));
+            border: 1px solid rgba(212, 175, 55, 0.38);
+            border-radius: 14px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.88), inset 0 0 40px rgba(212, 175, 55, 0.04);
+            max-width: 640px;
+            width: 100%;
+            padding: 22px 26px;
+            max-height: 92%;
+            overflow-y: auto;
+        }
+
+        @keyframes pulseGold {
+            0%, 100% { box-shadow: 0 0 10px rgba(212, 175, 55, 0.3); }
+            50% { box-shadow: 0 0 24px rgba(255, 208, 70, 0.65); }
+        }
+        .pulse-gold {
+            animation: pulseGold 2.3s infinite ease-in-out;
+        }
+
+        @media (max-width: 640px) {
+            #controls-deck { padding: 6px; gap: 5px; }
+            .sekiro-btn { padding: 7px 9px; font-size: 12px; min-height: 42px; }
+            .kbd-hint { display: none; }
+            .modal-card { padding: 16px 14px; }
+        }
+    </style>
+</head>
+<body>
+<div id="app-wrapper">
+    <!-- 顶部状态条 -->
+    <header id="top-bar">
+        <div class="flex items-center gap-2.5">
+            <span class="font-calligraphy text-xl sm:text-2xl text-amber-400 tracking-widest drop-shadow">隻狼 3D · 劍聖</span>
+            <span class="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded bg-sky-950/80 border border-sky-400/35 text-sky-200">
+                3D 锁定决斗 · 拖拽可转视角
+            </span>
+            <span id="charm-badge" class="hidden text-xs px-2 py-0.5 rounded bg-red-950/90 border border-red-500/60 text-red-200">
+                交符厄凭
+            </span>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm">
+            <div class="hidden md:flex items-center gap-3 text-stone-300 bg-black/45 px-3 py-1 rounded-lg border border-white/10">
+                <span>完美弹反: <strong id="stat-deflects" class="text-amber-400">0</strong></span>
+                <span class="opacity-30">|</span>
+                <span>识破: <strong id="stat-mikiri" class="text-red-400">0</strong></span>
+                <span class="opacity-30">|</span>
+                <span>连弹: <strong id="stat-streak" class="text-yellow-300">0</strong></span>
+            </div>
+
+            <button id="btn-sound" class="sekiro-btn !min-h-0 !py-1.5 !px-2.5 text-xs" title="开关音效">
+                <span id="sound-icon">🔊</span><span class="hidden sm:inline">音效</span>
+            </button>
+            <button id="btn-guide" class="sekiro-btn !min-h-0 !py-1.5 !px-2.5 text-xs" title="招式与秘传">
+                📜<span class="hidden sm:inline">秘传书</span>
+            </button>
+            <button id="btn-restart-top" class="sekiro-btn !min-h-0 !py-1.5 !px-2.5 text-xs" title="重新挑战">
+                ↺<span class="hidden sm:inline">再战</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 3D 渲染主舞台 -->
+    <main id="stage-container">
+        <canvas id="gl-canvas"></canvas>
+        <div id="screen-flash"></div>
+
+        <!-- 实时战斗 HUD 叠层 -->
+        <div id="hud-layer">
+            <!-- 顶部居中：Boss 对称架势条 -->
+            <div id="boss-posture-wrap" class="posture-frame absolute top-3.5 left-1/2 -translate-x-1/2 w-[52%] max-w-[440px] h-2.5">
+                <div id="boss-posture-fill" class="posture-fill"></div>
+                <div class="posture-center-tick"></div>
+            </div>
+
+            <!-- 左上角：Boss 血条、双忍杀印记、名称 -->
+            <div class="absolute top-9 left-4 sm:left-6 w-[44%] max-w-[320px]">
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="flex items-center gap-1.5">
+                        <span id="boss-orb-0" class="w-3.5 h-3.5 rounded-full bg-red-600 border border-amber-400 shadow-[0_0_8px_rgba(220,38,38,0.85)]"></span>
+                        <span id="boss-orb-1" class="w-3.5 h-3.5 rounded-full bg-red-600 border border-amber-400 shadow-[0_0_8px_rgba(220,38,38,0.85)]"></span>
+                    </div>
+                    <span id="boss-name-label" class="text-xs sm:text-sm font-semibold tracking-wider text-stone-100 drop-shadow">剑圣 苇名一心</span>
+                </div>
+                <div class="w-full h-2.5 bg-black/75 border border-amber-500/50 rounded-[2px] overflow-hidden shadow">
+                    <div id="boss-hp-fill" class="h-full w-full bg-gradient-to-r from-red-900 to-red-600 transition-all duration-100"></div>
+                </div>
+            </div>
+
+            <!-- 底部居中：玩家对称架势条 -->
+            <div id="player-posture-wrap" class="posture-frame absolute bottom-5 left-1/2 -translate-x-1/2 w-[42%] max-w-[320px] h-2 opacity-0 transition-opacity duration-200">
+                <div id="player-posture-fill" class="posture-fill"></div>
+                <div class="posture-center-tick"></div>
+            </div>
+
+            <!-- 左下角：玩家血条与回生樱花 -->
+            <div class="absolute bottom-4 left-4 sm:left-6 w-[38%] max-w-[260px]">
+                <div id="player-res-label" class="text-xs sm:text-sm text-pink-300 mb-1 drop-shadow">🌸 回生可用</div>
+                <div class="w-full h-2.5 bg-black/80 border border-stone-400/50 rounded-[2px] overflow-hidden shadow">
+                    <div id="player-hp-fill" class="h-full w-full bg-gradient-to-r from-red-900 to-red-500 transition-all duration-100"></div>
+                </div>
+            </div>
+
+            <!-- 3D 实时投影：忍杀红点 -->
+            <div id="deathblow-dot">
+                <div class="db-ring"><div class="db-core"></div></div>
+            </div>
+
+            <!-- 3D 实时投影：战斗手感浮字容器 -->
+            <div id="float-layer" class="absolute inset-0"></div>
+        </div>
+
+        <!-- 居中书法大字 -->
+        <div id="kanji-overlay">
+            <div id="big-kanji" class="font-calligraphy text-8xl sm:text-9xl text-red-600 kanji-pop"></div>
+            <div id="big-subtext" class="mt-2 text-sm sm:text-lg tracking-[0.42em] text-amber-200/95 opacity-0 transition-opacity duration-300 uppercase font-semibold"></div>
+        </div>
+
+        <!-- 回生浮层 -->
+        <div id="resurrect-prompt" class="hidden absolute inset-0 z-25 flex flex-col items-center justify-center bg-black/50 pointer-events-auto">
+            <div class="font-calligraphy text-8xl sm:text-9xl text-red-600 drop-shadow-[0_0_26px_rgba(220,38,38,0.88)] mb-3">死</div>
+            <p class="text-stone-300 text-sm mb-6 tracking-widest">「犹豫，就会败北。」</p>
+            <div class="flex gap-4">
+                <button id="btn-resurrect" class="sekiro-btn sekiro-btn-primary pulse-gold !px-7 !py-3 text-base">
+                    🌸 回生 <span class="kbd-hint">Space / 点击</span>
+                </button>
+                <button id="btn-giveup" class="sekiro-btn !px-5 !py-3 text-sm opacity-80">
+                    接受死亡
+                </button>
+            </div>
+        </div>
+
+        <!-- 开始 / 秘传 / 结算 弹窗 -->
+        <div id="overlay-modal" class="modal-backdrop">
+            <div class="modal-card">
+                <div class="text-center border-b border-amber-500/25 pb-3.5 mb-4">
+                    <div class="text-xs tracking-[0.4em] text-amber-400/85 mb-1">SEKIRO 3D · 银月芦苇荡</div>
+                    <h1 id="modal-title" class="font-calligraphy text-4xl sm:text-5xl text-stone-100 tracking-widest drop-shadow">
+                        3D 剑圣 · 苇名一心
+                    </h1>
+                    <p id="modal-subtitle" class="text-stone-400 text-xs sm:text-sm mt-1.5">
+                        立体锁定绕圈拼刀，动态弹反火光映照芦苇。听声辨招，一决生死。
+                    </p>
+                </div>
+
+                <!-- 胜负结算数据 -->
+                <div id="result-stats" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 bg-black/45 p-3 rounded-xl border border-amber-500/25 text-center">
+                    <div class="p-1.5">
+                        <div class="text-xs text-stone-400">完美弹反</div>
+                        <div id="res-deflects" class="text-xl font-bold text-amber-400">0</div>
+                    </div>
+                    <div class="p-1.5">
+                        <div class="text-xs text-stone-400">弹反率</div>
+                        <div id="res-rate" class="text-xl font-bold text-yellow-200">0%</div>
+                    </div>
+                    <div class="p-1.5">
+                        <div class="text-xs text-stone-400">识破 / 踩头</div>
+                        <div id="res-counters" class="text-xl font-bold text-red-400">0</div>
+                    </div>
+                    <div class="p-1.5">
+                        <div class="text-xs text-stone-400">决斗耗时</div>
+                        <div id="res-time" class="text-xl font-bold text-stone-200">0.0s</div>
+                    </div>
+                </div>
+
+                <!-- 3D 拼刀指南 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-stone-300 mb-4">
+                    <div class="bg-black/35 p-3 rounded-lg border border-white/10">
+                        <div class="text-amber-400 font-bold mb-1.5">⚔️ 3D 锁定拼刀与视角</div>
+                        <ul class="space-y-1 text-stone-300/90 leading-relaxed">
+                            <li>• <strong class="text-amber-200">WASD 绕圈锁定</strong>：W/S 进退，A/D 围绕一心侧移走位。</li>
+                            <li>• <strong class="text-amber-200">左键攻 / 右键弹</strong>：听见一心清脆<span class="text-amber-300">高音招架+金光爆闪</span>，立刻转防！</li>
+                            <li>• <strong class="text-amber-200">自由旋转视角</strong>：在画面中<span class="text-sky-300">按住鼠标拖动</span>或按 <span class="text-white">Q/E</span> 可随时调整 3D 机位。</li>
+                        </ul>
+                    </div>
+                    <div class="bg-black/35 p-3 rounded-lg border border-white/10">
+                        <div class="text-red-400 font-bold mb-1.5">危 破招与二阶段真意</div>
+                        <ul class="space-y-1 text-stone-300/90 leading-relaxed">
+                            <li>• <strong class="text-red-300">【危】突刺</strong>：压刀突刺瞬间按 <span class="text-white font-semibold">Shift / L</span> 踏刃触发<strong>识破</strong>！</li>
+                            <li>• <strong class="text-red-300">【危】下段横扫</strong>：按 <span class="text-white font-semibold">Space</span> 跃起，再按一次触发<strong>空中踩头</strong>！</li>
+                            <li>• <strong class="text-sky-300">十字斩 & 龙闪 & 跃空劈</strong>：二阶段将解锁高频四连、3D 跃空重劈与远程剑气！</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 难度开关 -->
+                <div class="flex flex-wrap items-center justify-between gap-3 bg-black/40 px-4 py-2.5 rounded-xl border border-white/10 mb-5">
+                    <label class="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                        <input id="toggle-charmless" type="checkbox" class="w-4 h-4 accent-red-600 rounded">
+                        <span>
+                            <strong class="text-red-300">交还九郎的护身符</strong>
+                            <span class="text-stone-400 block sm:inline sm:ml-1">(普通格挡削血)</span>
+                        </span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                        <input id="toggle-timing-hud" type="checkbox" checked class="w-4 h-4 accent-amber-500 rounded">
+                        <span class="text-stone-300">显示弹反手感浮字</span>
+                    </label>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-3">
+                    <button id="btn-start-game" class="sekiro-btn sekiro-btn-primary pulse-gold !px-8 !py-3 text-base">
+                        ⚔️ 踏入 3D 芦苇荡 · 参上！
+                    </button>
+                    <button id="btn-resume-game" class="hidden sekiro-btn !px-6 !py-3 text-base">
+                        继续死斗
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部画布外操作栏（键鼠直观提示 + 移动端完整触控支持） -->
+    <footer id="controls-deck">
+        <!-- 方向控制 -->
+        <div class="flex items-center gap-1">
+            <button id="ctrl-left" class="sekiro-btn !px-3" title="左绕">◀<span class="kbd-hint">A</span></button>
+            <button id="ctrl-fwd" class="sekiro-btn !px-3" title="前进">▲<span class="kbd-hint">W</span></button>
+            <button id="ctrl-back" class="sekiro-btn !px-3" title="后撤">▼<span class="kbd-hint">S</span></button>
+            <button id="ctrl-right" class="sekiro-btn !px-3" title="右绕">▶<span class="kbd-hint">D</span></button>
+        </div>
+
+        <!-- 战斗动作控制 -->
+        <div class="flex items-center gap-1.5 flex-wrap justify-center">
+            <button id="ctrl-attack" class="sekiro-btn sekiro-btn-primary">
+                ⚔️ 斩击/忍杀 <span class="kbd-hint">左键 / J</span>
+            </button>
+            <button id="ctrl-deflect" class="sekiro-btn sekiro-btn-deflect">
+                🛡️ 弹反/防御 <span class="kbd-hint">右键 / K</span>
+            </button>
+            <button id="ctrl-dodge" class="sekiro-btn">
+                ⚡ 识破/垫步 <span class="kbd-hint">Shift / L</span>
+            </button>
+            <button id="ctrl-jump" class="sekiro-btn">
+                ⤴️ 跳/踩头 <span class="kbd-hint">Space</span>
+            </button>
+            <button id="ctrl-heal" class="sekiro-btn">
+                🍶 葫芦(<span id="heal-count-btn">3</span>) <span class="kbd-hint">R</span>
+            </button>
+            <button id="ctrl-cam-reset" class="sekiro-btn !px-2.5 text-xs" title="重置3D视角">
+                🎥 <span class="kbd-hint">C</span>
+            </button>
+        </div>
+    </footer>
+</div>
+
+<script>
+/**
+ * ============================================================================
+ * 《只狼 3D：剑圣苇名一心》单文件 WebGL 决斗引擎
+ * 核心模块：
+ *   1. SekiroAudioEngine : 物理声学合成的刀剑碰撞、弹反泛音、危字警报、识破与太鼓
+ *   2. SamuraiRig3D      : 程序化 3D 可动关节武士模型（狼 & 苇名一心），含实时动作插值与3D刀光
+ *   3. VFX3DManager      : 3D 物理火花（地面反弹）、立体星芒、冲击波环、血雾、樱花与弹反动态点光源
+ *   4. Sekiro3DGame      : 3D 银月芦苇荡场景、锁定绕圈移动、鼠标拖拽相机、完整打铁/架势/危技系统
+ * ============================================================================
+ */
+
+/* --------------------------------------------------------------------------
+ * 1. 物理声学合成引擎（高度还原只狼极清脆高亢的金铁交鸣）
+ * -------------------------------------------------------------------------- */
+class SekiroAudioEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.noiseBuffer = null;
+        this.enabled = true;
+        this.initialized = false;
+    }
+
+    init() {
+        if (this.initialized) {
+            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            return;
+        }
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.86;
+
+            // 动态压缩器：密集打铁不破音，金属脆度更贴耳
+            const comp = this.ctx.createDynamicsCompressor();
+            comp.threshold.setValueAtTime(-12, this.ctx.currentTime);
+            comp.knee.setValueAtTime(14, this.ctx.currentTime);
+            comp.ratio.setValueAtTime(6, this.ctx.currentTime);
+            comp.attack.setValueAtTime(0.002, this.ctx.currentTime);
+            comp.release.setValueAtTime(0.12, this.ctx.currentTime);
+
+            this.masterGain.connect(comp);
+            comp.connect(this.ctx.destination);
+
+            // 生成 2 秒白噪声缓存
+            const sr = this.ctx.sampleRate;
+            this.noiseBuffer = this.ctx.createBuffer(1, sr * 2, sr);
+            const ch = this.noiseBuffer.getChannelData(0);
+            for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+
+            this.metalCurve = this._makeDistortionCurve(30);
+            this._startNightWind();
+            this.initialized = true;
+        } catch (err) {
+            console.warn('Web Audio init error:', err);
+        }
+    }
+
+    setEnabled(flag) {
+        this.enabled = flag;
+        if (this.masterGain && this.ctx) {
+            this.masterGain.gain.setTargetAtTime(flag ? 0.86 : 0.0, this.ctx.currentTime, 0.04);
+        }
+    }
+
+    _makeDistortionCurve(amount) {
+        const n = 44100;
+        const curve = new Float32Array(n);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < n; i++) {
+            const x = (i * 2) / n - 1;
+            curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+        }
+        return curve;
+    }
+
+    _startNightWind() {
+        if (!this.ctx || !this.noiseBuffer) return;
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuffer;
+        src.loop = true;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 340;
+        filter.Q.value = 2.4;
+
+        const lfo = this.ctx.createOscillator();
+        lfo.frequency.value = 0.13;
+        const lfoG = this.ctx.createGain();
+        lfoG.gain.value = 140;
+        lfo.connect(lfoG);
+        lfoG.connect(filter.frequency);
+        lfo.start();
+
+        const g = this.ctx.createGain();
+        g.gain.value = 0.032;
+        src.connect(filter);
+        filter.connect(g);
+        g.connect(this.masterGain);
+        src.start();
+    }
+
+    // 完美弹反（玩家弹反清脆明亮，Boss招架音色略沉但锋利，听声立辨回合转换）
+    playDeflect(streak = 1, isEnemyParry = false) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const jitter = 0.96 + Math.random() * 0.08 + Math.min(streak, 6) * 0.014;
+        const scale = isEnemyParry ? 0.86 : 1.05;
+
+        // 1. 高频钢刃瞬态脆响
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const hp = this.ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.setValueAtTime(3400, now);
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.88, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.036);
+        noise.connect(hp);
+        hp.connect(ng);
+        ng.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.045);
+
+        // 2. 非谐波太刀金属泛音簇
+        const partials = isEnemyParry
+            ? [1160, 1910, 2860, 4080, 5620, 7180]
+            : [1410, 2320, 3410, 4860, 6420, 8250];
+        const gains = [0.22, 0.28, 0.27, 0.23, 0.16, 0.11];
+        const decays = [0.48, 0.44, 0.37, 0.30, 0.23, 0.17];
+
+        const bus = this.ctx.createGain();
+        bus.gain.setValueAtTime(0.95, now);
+        const shaper = this.ctx.createWaveShaper();
+        shaper.curve = this.metalCurve;
+        shaper.oversample = '2x';
+        bus.connect(shaper);
+        shaper.connect(this.masterGain);
+
+        partials.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+            const f = freq * scale * jitter;
+            osc.frequency.setValueAtTime(f * 1.04, now);
+            osc.frequency.exponentialRampToValueAtTime(f, now + 0.018);
+
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.linearRampToValueAtTime(gains[i], now + 0.002);
+            g.gain.exponentialRampToValueAtTime(0.0008, now + decays[i]);
+
+            osc.connect(g);
+            g.connect(bus);
+            osc.start(now);
+            osc.stop(now + decays[i] + 0.02);
+        });
+
+        // 3. 刀身咬合冲击低频
+        const punch = this.ctx.createOscillator();
+        punch.type = 'sine';
+        punch.frequency.setValueAtTime(isEnemyParry ? 300 : 390, now);
+        punch.frequency.exponentialRampToValueAtTime(110, now + 0.075);
+        const pg = this.ctx.createGain();
+        pg.gain.setValueAtTime(0.45, now);
+        pg.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+        punch.connect(pg);
+        pg.connect(this.masterGain);
+        punch.start(now);
+        punch.stop(now + 0.09);
+    }
+
+    // 普通格挡（沉闷短促）
+    playBlock(isEnemyBlock = false) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const jitter = 0.94 + Math.random() * 0.12;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(isEnemyBlock ? 1680 : 1220, now);
+        bp.Q.value = 1.6;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.54, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        noise.connect(bp);
+        bp.connect(ng);
+        ng.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.07);
+
+        const freqs = isEnemyBlock ? [730, 1280, 2090, 3120] : [510, 940, 1590, 2400];
+        freqs.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f * jitter, now);
+            osc.frequency.exponentialRampToValueAtTime(f * jitter * 0.91, now + 0.11);
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.18 / (idx * 0.5 + 1), now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        });
+
+        const body = this.ctx.createOscillator();
+        body.type = 'sine';
+        body.frequency.setValueAtTime(205, now);
+        body.frequency.exponentialRampToValueAtTime(64, now + 0.09);
+        const bg = this.ctx.createGain();
+        bg.gain.setValueAtTime(0.5, now);
+        bg.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        body.connect(bg);
+        bg.connect(this.masterGain);
+        body.start(now);
+        body.stop(now + 0.11);
+    }
+
+    playHitFlesh(heavy = false) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(heavy ? 880 : 1280, now);
+        bp.frequency.exponentialRampToValueAtTime(240, now + 0.14);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(heavy ? 0.9 : 0.65, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+        noise.connect(bp);
+        bp.connect(g);
+        g.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.17);
+
+        const thud = this.ctx.createOscillator();
+        thud.type = 'sine';
+        thud.frequency.setValueAtTime(heavy ? 145 : 185, now);
+        thud.frequency.exponentialRampToValueAtTime(40, now + 0.14);
+        const tg = this.ctx.createGain();
+        tg.gain.setValueAtTime(heavy ? 0.78 : 0.5, now);
+        tg.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        thud.connect(tg);
+        tg.connect(this.masterGain);
+        thud.start(now);
+        thud.stop(now + 0.16);
+    }
+
+    playSwing(heavy = false) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const dur = heavy ? 0.22 : 0.13;
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = 2.6;
+        bp.frequency.setValueAtTime(heavy ? 640 : 1080, now);
+        bp.frequency.exponentialRampToValueAtTime(heavy ? 170 : 300, now + dur);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.linearRampToValueAtTime(heavy ? 0.34 : 0.2, now + dur * 0.25);
+        g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        noise.connect(bp);
+        bp.connect(g);
+        g.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + dur + 0.02);
+    }
+
+    playPerilous() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const sub = this.ctx.createOscillator();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(118, now);
+        sub.frequency.exponentialRampToValueAtTime(34, now + 0.46);
+        const sg = this.ctx.createGain();
+        sg.gain.setValueAtTime(0.88, now);
+        sg.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+        sub.connect(sg);
+        sg.connect(this.masterGain);
+        sub.start(now);
+        sub.stop(now + 0.54);
+
+        [785, 840, 1570].forEach((f, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = i < 2 ? 'sawtooth' : 'triangle';
+            osc.frequency.setValueAtTime(f * 1.12, now);
+            osc.frequency.exponentialRampToValueAtTime(f * 0.72, now + 0.55);
+            const bp = this.ctx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.setValueAtTime(1220, now);
+            bp.Q.value = 3.5;
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.001, now);
+            g.gain.linearRampToValueAtTime(i === 2 ? 0.14 : 0.22, now + 0.03);
+            g.gain.exponentialRampToValueAtTime(0.0008, now + 0.6);
+            osc.connect(bp);
+            bp.connect(g);
+            g.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.62);
+        });
+    }
+
+    playCrossFlash() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [3680, 5520, 7360].forEach((f, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, now);
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.001, now);
+            g.gain.linearRampToValueAtTime(0.19 / (i + 1), now + 0.012);
+            g.gain.exponentialRampToValueAtTime(0.0008, now + 0.35);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.38);
+        });
+    }
+
+    playMikiri() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        this.playDeflect(6, false);
+
+        const stomp = this.ctx.createOscillator();
+        stomp.type = 'sine';
+        stomp.frequency.setValueAtTime(185, now);
+        stomp.frequency.exponentialRampToValueAtTime(32, now + 0.34);
+        const sg = this.ctx.createGain();
+        sg.gain.setValueAtTime(0.96, now);
+        sg.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+        stomp.connect(sg);
+        sg.connect(this.masterGain);
+        stomp.start(now);
+        stomp.stop(now + 0.4);
+    }
+
+    playPostureBreak(isBoss = true) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const boom = this.ctx.createOscillator();
+        boom.type = 'triangle';
+        boom.frequency.setValueAtTime(isBoss ? 142 : 112, now);
+        boom.frequency.exponentialRampToValueAtTime(28, now + 0.56);
+        const bg = this.ctx.createGain();
+        bg.gain.setValueAtTime(0.9, now);
+        bg.gain.exponentialRampToValueAtTime(0.001, now + 0.62);
+        boom.connect(bg);
+        bg.connect(this.masterGain);
+        boom.start(now);
+        boom.stop(now + 0.64);
+
+        if (isBoss) {
+            const chime = this.ctx.createOscillator();
+            chime.type = 'sine';
+            chime.frequency.setValueAtTime(880, now);
+            chime.frequency.exponentialRampToValueAtTime(660, now + 0.45);
+            const cg = this.ctx.createGain();
+            cg.gain.setValueAtTime(0.28, now);
+            cg.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            chime.connect(cg);
+            cg.connect(this.masterGain);
+            chime.start(now);
+            chime.stop(now + 0.52);
+        }
+    }
+
+    playDeathblow() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const taiko = this.ctx.createOscillator();
+        taiko.type = 'sine';
+        taiko.frequency.setValueAtTime(138, now);
+        taiko.frequency.exponentialRampToValueAtTime(28, now + 0.78);
+        const tg = this.ctx.createGain();
+        tg.gain.setValueAtTime(1.0, now);
+        tg.gain.exponentialRampToValueAtTime(0.001, now + 0.88);
+        taiko.connect(tg);
+        tg.connect(this.masterGain);
+        taiko.start(now);
+        taiko.stop(now + 0.92);
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(2200, now);
+        bp.frequency.exponentialRampToValueAtTime(180, now + 0.55);
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.85, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        noise.connect(bp);
+        bp.connect(ng);
+        ng.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.64);
+
+        [920, 1840, 2760].forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, now + 0.04);
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.18 / (idx + 1), now + 0.04);
+            g.gain.exponentialRampToValueAtTime(0.0005, now + 0.92);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            osc.start(now + 0.04);
+            osc.stop(now + 0.95);
+        });
+    }
+
+    playHeal() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, now + i * 0.055);
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.001, now + i * 0.055);
+            g.gain.linearRampToValueAtTime(0.14, now + i * 0.055 + 0.03);
+            g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.055 + 0.4);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            osc.start(now + i * 0.055);
+            osc.stop(now + i * 0.055 + 0.45);
+        });
+    }
+
+    playStep() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(520, now);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.22, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+        noise.connect(lp);
+        lp.connect(g);
+        g.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.08);
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * 2. 3D 可动骨骼武士模型构建器（狼 & 剑圣苇名一心）
+ *    纯几何体程序化建模，无需外部贴图，轮廓锐利且动作读招极其清晰
+ * -------------------------------------------------------------------------- */
+class SamuraiRig3D {
+    constructor(isBoss) {
+        this.isBoss = isBoss;
+        this.root = new THREE.Group();
+        const scale = isBoss ? 1.13 : 1.0;
+        this.root.scale.set(scale, scale, scale);
+
+        // 材质调色板
+        const matSkin = new THREE.MeshStandardMaterial({ color: 0xe2c8b0, roughness: 0.72 });
+        const matHakama = new THREE.MeshStandardMaterial({ color: isBoss ? 0x1b2330 : 0x1e1a18, roughness: 0.85 });
+        const matHaori = new THREE.MeshStandardMaterial({ color: isBoss ? 0x3b4d63 : 0xa34818, roughness: 0.7 });
+        const matInner = new THREE.MeshStandardMaterial({ color: isBoss ? 0xdbe4ee : 0x2d2926, roughness: 0.8 });
+        const matAccent = new THREE.MeshStandardMaterial({ color: isBoss ? 0x1e293b : 0xb45309, roughness: 0.65 });
+        const matHair = new THREE.MeshStandardMaterial({ color: isBoss ? 0xe6edf5 : 0x16161a, roughness: 0.6 });
+        const matGold = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.25 });
+        const matHandle = new THREE.MeshStandardMaterial({ color: 0x1a181c, roughness: 0.9 });
+        this.matBlade = new THREE.MeshStandardMaterial({
+            color: 0xf4f8ff,
+            metalness: 0.95,
+            roughness: 0.12,
+            emissive: new THREE.Color(isBoss ? 0x1a2b3c : 0x1a1408),
+            emissiveIntensity: 0.45
+        });
+
+        // 髋部枢纽（控制下蹲、跪地、整体倾斜）
+        this.hips = new THREE.Group();
+        this.hips.position.y = 0.95;
+        this.root.add(this.hips);
+
+        // 袴裤裙摆
+        const skirtGeo = new THREE.CylinderGeometry(0.24, 0.42, 0.62, 8);
+        const skirt = new THREE.Mesh(skirtGeo, matHakama);
+        skirt.position.y = -0.25;
+        skirt.castShadow = true;
+        this.hips.add(skirt);
+
+        // 左右腿
+        this.leftLeg = new THREE.Group();
+        this.leftLeg.position.set(-0.14, -0.05, 0);
+        const legGeo = new THREE.CylinderGeometry(0.09, 0.065, 0.88, 7);
+        const lLegMesh = new THREE.Mesh(legGeo, matHakama);
+        lLegMesh.position.y = -0.44;
+        lLegMesh.castShadow = true;
+        this.leftLeg.add(lLegMesh);
+        this.hips.add(this.leftLeg);
+
+        this.rightLeg = new THREE.Group();
+        this.rightLeg.position.set(0.14, -0.05, 0);
+        const rLegMesh = new THREE.Mesh(legGeo, matHakama);
+        rLegMesh.position.y = -0.44;
+        rLegMesh.castShadow = true;
+        this.rightLeg.add(rLegMesh);
+        this.hips.add(this.rightLeg);
+
+        // 躯干枢纽（前倾、扭腰挥斩）
+        this.torso = new THREE.Group();
+        this.torso.position.y = 0.06;
+        this.hips.add(this.torso);
+
+        // 胸膛与和服羽织
+        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.28), matHaori);
+        chest.position.y = 0.34;
+        chest.castShadow = true;
+        this.torso.add(chest);
+
+        // 白色或暗色内襟 V 领
+        const collar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.30), matInner);
+        collar.position.set(0, 0.38, 0.01);
+        this.torso.add(collar);
+
+        // 腰带 (Obi)
+        const obi = new THREE.Mesh(new THREE.BoxGeometry(0.49, 0.14, 0.31), matAccent);
+        obi.position.y = 0.08;
+        this.torso.add(obi);
+
+        // 狼的飘动红褐围巾 / 一心的背后和服宽袖飘带
+        this.cape = new THREE.Mesh(
+            new THREE.BoxGeometry(isBoss ? 0.42 : 0.16, 0.48, 0.05),
+            isBoss ? matHaori : matAccent
+        );
+        this.cape.position.set(0, 0.44, -0.18);
+        this.cape.rotation.x = 0.35;
+        this.torso.add(this.cape);
+
+        // 腰间刀鞘 (Saya)
+        const scabbard = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.022, 1.15, 6), matHandle);
+        scabbard.position.set(-0.28, 0.06, -0.1);
+        scabbard.rotation.x = Math.PI * 0.42;
+        scabbard.rotation.z = 0.15;
+        this.torso.add(scabbard);
+
+        // 头部与发型
+        this.head = new THREE.Group();
+        this.head.position.set(0, 0.76, 0);
+        this.torso.add(this.head);
+
+        const skull = new THREE.Mesh(new THREE.SphereGeometry(0.165, 12, 10), matSkin);
+        skull.castShadow = true;
+        this.head.add(skull);
+
+        // 头发主体
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.175, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.62), matHair);
+        hairCap.position.y = 0.02;
+        this.head.add(hairCap);
+
+        if (isBoss) {
+            // 剑圣银白高髻、长鬓与白须
+            const bun = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), matHair);
+            bun.position.set(0, 0.21, -0.06);
+            this.head.add(bun);
+
+            const beard = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.14, 6), matHair);
+            beard.position.set(0, -0.13, 0.11);
+            beard.rotation.x = Math.PI;
+            this.head.add(beard);
+        } else {
+            // 狼的马尾 + 右鬓龙胤白发
+            const pony = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.32, 6), matHair);
+            pony.position.set(0, 0.02, -0.22);
+            pony.rotation.x = -Math.PI * 0.38;
+            this.head.add(pony);
+
+            const whiteLock = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.14, 0.04),
+                new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 })
+            );
+            whiteLock.position.set(0.12, 0.02, 0.09);
+            this.head.add(whiteLock);
+        }
+
+        // 右臂 + 主太刀枢纽（负责挥砍、格挡架刀、居合、突刺）
+        this.rightArm = new THREE.Group();
+        this.rightArm.position.set(0.28, 0.56, 0.02);
+        this.torso.add(this.rightArm);
+
+        const rArmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.56, 7), matHaori);
+        rArmMesh.position.y = -0.26;
+        rArmMesh.castShadow = true;
+        this.rightArm.add(rArmMesh);
+
+        // 左臂（持刀协同 / 忍义手暗金属）
+        this.leftArm = new THREE.Group();
+        this.leftArm.position.set(-0.28, 0.56, 0.02);
+        this.torso.add(this.leftArm);
+        const matLeftArm = isBoss ? matHaori : new THREE.MeshStandardMaterial({ color: 0x3b3530, metalness: 0.4, roughness: 0.5 });
+        const lArmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.56, 7), matLeftArm);
+        lArmMesh.position.y = -0.26;
+        lArmMesh.castShadow = true;
+        this.leftArm.add(lArmMesh);
+
+        // 太刀组（挂在右手腕部）
+        this.swordPivot = new THREE.Group();
+        this.swordPivot.position.set(0, -0.52, 0.06);
+        this.rightArm.add(this.swordPivot);
+
+        const bladeLen = isBoss ? 1.52 : 1.24;
+        // 刀柄
+        const tsuka = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.022, 0.34, 6), matHandle);
+        tsuka.rotation.x = Math.PI / 2;
+        tsuka.position.z = -0.14;
+        this.swordPivot.add(tsuka);
+
+        // 金色刀锷
+        const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.018, 10), matGold);
+        tsuba.rotation.x = Math.PI / 2;
+        tsuba.position.z = 0.03;
+        this.swordPivot.add(tsuba);
+
+        // 刀刃（窄长锋利高光钢刃）
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.05, bladeLen), this.matBlade);
+        blade.position.z = 0.04 + bladeLen / 2;
+        blade.castShadow = true;
+        this.swordPivot.add(blade);
+
+        // 二阶段剑圣环绕微光圈
+        if (isBoss) {
+            const auraGeo = new THREE.RingGeometry(0.65, 0.92, 24);
+            const auraMat = new THREE.MeshBasicMaterial({
+                color: 0xbae6fd,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0
+            });
+            this.auraRing = new THREE.Mesh(auraGeo, auraMat);
+            this.auraRing.rotation.x = -Math.PI / 2;
+            this.auraRing.position.y = 0.06;
+            this.root.add(this.auraRing);
+        }
+
+        // 目标姿态角（用于每帧平滑插值，动作干脆又有重量感）
+        this.targetPose = {
+            hipY: 0.95,
+            torsoX: 0.08, torsoY: 0, torsoZ: 0,
+            rArmX: -0.7, rArmY: 0.25, rArmZ: -0.15,
+            lArmX: -0.65, lArmY: -0.35, lArmZ: 0.2,
+            swordX: 0.15, swordY: -0.25, swordZ: 0
+        };
+    }
+
+    // 获取刀尖/剑刃中部在世界空间中的精确坐标（用于精准生成弹反火花位置！）
+    getBladeWorldPos(outVec) {
+        outVec.set(0, 0, this.isBoss ? 0.85 : 0.7);
+        return this.swordPivot.localToWorld(outVec);
+    }
+
+    getChestWorldPos(outVec) {
+        outVec.set(0, 0.42, 0.12);
+        return this.torso.localToWorld(outVec);
+    }
+
+    // 根据实体状态更新骨骼姿态
+    updateAnimation(ent, dt, nowSec) {
+        const tp = this.targetPose;
+        // 默认待机架势
+        tp.hipY = 0.95;
+        tp.torsoX = 0.10; tp.torsoY = 0.15; tp.torsoZ = 0;
+        tp.rArmX = -0.85; tp.rArmY = 0.2; tp.rArmZ = -0.18;
+        tp.lArmX = -0.75; tp.lArmY = -0.38; tp.lArmZ = 0.25;
+        tp.swordX = 0.1; tp.swordY = -0.25; tp.swordZ = 0;
+
+        let lerpSpeed = 16;
+
+        // 走路腿部摆动
+        const speedHoriz = Math.hypot(ent.vx, ent.vz);
+        if ((ent.state === 'move' || ent.state === 'stalk') && speedHoriz > 0.4) {
+            const stride = Math.sin(nowSec * 11) * 0.58;
+            this.leftLeg.rotation.x = stride;
+            this.rightLeg.rotation.x = -stride;
+            tp.hipY = 0.93 + Math.abs(Math.cos(nowSec * 11)) * 0.05;
+            tp.torsoX = 0.18;
+        } else {
+            this.leftLeg.rotation.x += (0 - this.leftLeg.rotation.x) * Math.min(1, dt * 12);
+            this.rightLeg.rotation.x += (0 - this.rightLeg.rotation.x) * Math.min(1, dt * 12);
+        }
+
+        // 披风/围巾随风微摆
+        this.cape.rotation.x = 0.32 + Math.sin(nowSec * 5 + (this.isBoss ? 2 : 0)) * 0.14 + Math.min(0.45, speedHoriz * 0.04);
+
+        if (ent.state === 'dead') {
+            tp.hipY = 0.24;
+            tp.torsoX = -1.35;
+            tp.rArmX = -0.2; tp.rArmZ = -1.1;
+            lerpSpeed = 6;
+        } else if (ent.state === 'posture_broken' || ent.state === 'deathblow_victim') {
+            // 跪地大破架势！
+            tp.hipY = 0.56;
+            tp.torsoX = -0.32; tp.torsoY = -0.2;
+            tp.rArmX = 0.35; tp.rArmZ = -0.85;
+            tp.lArmX = 0.25; tp.lArmZ = 0.65;
+            tp.swordX = 0.7;
+            lerpSpeed = 12;
+        } else if (ent.state === 'guard') {
+            // 经典斜竖刀身防御架势！
+            tp.hipY = 0.88;
+            tp.torsoX = 0.06; tp.torsoY = -0.18;
+            tp.rArmX = -1.35; tp.rArmY = -0.45; tp.rArmZ = 0.35;
+            tp.lArmX = -1.2; tp.lArmY = 0.35; tp.lArmZ = -0.15;
+            tp.swordX = -0.35; tp.swordY = 0.75; tp.swordZ = 0.85;
+            lerpSpeed = 28;
+        } else if (ent.state === 'hitstun') {
+            tp.hipY = 0.86;
+            tp.torsoX = -0.45; tp.torsoY = 0.35;
+            tp.rArmX = -0.3; tp.rArmZ = -0.9;
+            lerpSpeed = 22;
+        } else if (ent.state === 'dodge' || ent.state === 'mikiri_anim') {
+            tp.hipY = 0.72;
+            tp.torsoX = 0.48; tp.torsoY = -0.25;
+            tp.rArmX = 0.5; tp.rArmZ = -0.5;
+            tp.lArmX = -0.7;
+            lerpSpeed = 24;
+        } else if (ent.state === 'heal') {
+            tp.hipY = 0.92;
+            tp.torsoX = -0.15;
+            tp.lArmX = -2.1; tp.lArmY = 0.35;
+            tp.rArmX = 0.2;
+            lerpSpeed = 14;
+        } else if (ent.state === 'deathblow') {
+            tp.hipY = 0.78;
+            tp.torsoX = 0.42; tp.torsoY = 0.35;
+            tp.rArmX = -1.55; tp.rArmY = 0.0; tp.rArmZ = 0.0;
+            tp.swordX = 0.0; tp.swordY = 0.0;
+            lerpSpeed = 26;
+        } else if (ent.state === 'attack') {
+            if (!this.isBoss) {
+                const ratio = 1 - ent.stateTimer / ent.attackDur;
+                if (ratio < 0.34) {
+                    // 蓄力举刀
+                    tp.torsoY = ent.comboStep === 1 ? -0.65 : 0.65;
+                    tp.rArmX = -2.25; tp.rArmZ = ent.comboStep === 1 ? 0.55 : -0.65;
+                    tp.swordX = -0.4;
+                } else {
+                    // 迅猛挥斩
+                    tp.hipY = 0.84;
+                    tp.torsoX = 0.32;
+                    tp.torsoY = ent.comboStep === 1 ? 0.75 : -0.75;
+                    tp.rArmX = -0.95; tp.rArmY = ent.comboStep === 1 ? 0.65 : -0.65; tp.rArmZ = 0.2;
+                    tp.swordX = 0.35;
+                }
+                lerpSpeed = 30;
+            } else if (ent.currentMove) {
+                const step = ent.currentMove.steps[ent.moveStep];
+                const total = step.windup + step.active + step.recover;
+                const elapsed = total - ent.stepTimer;
+                const inWindup = elapsed < step.windup;
+
+                if (ent.currentMove.isCross && ent.moveStep === 0 && inWindup) {
+                    // 【苇名十字斩】标志性低身居合收刀姿态！
+                    tp.hipY = 0.66;
+                    tp.torsoX = 0.42; tp.torsoY = 0.58;
+                    tp.rArmX = -0.55; tp.rArmY = -0.85; tp.rArmZ = 0.65;
+                    tp.lArmX = -0.7; tp.lArmY = 0.45;
+                    tp.swordX = 0.2; tp.swordY = -1.85;
+                    lerpSpeed = 14;
+                } else if (step.type === 'thrust') {
+                    // 【危】突刺：收于右腰 -> 笔直前贯！
+                    if (inWindup) {
+                        tp.hipY = 0.74;
+                        tp.torsoX = 0.15; tp.torsoY = 0.85;
+                        tp.rArmX = -0.4; tp.rArmY = 0.3; tp.rArmZ = -0.35;
+                        tp.swordX = -0.8; tp.swordY = -0.1;
+                        lerpSpeed = 14;
+                    } else {
+                        tp.hipY = 0.76;
+                        tp.torsoX = 0.48; tp.torsoY = -0.25;
+                        tp.rArmX = -1.55; tp.rArmY = -0.1; tp.rArmZ = 0.0;
+                        tp.swordX = 0.0; tp.swordY = 0.0;
+                        lerpSpeed = 34;
+                    }
+                } else if (step.type === 'sweep') {
+                    // 【危】下段横扫：低重心反拉 -> 贴地横斩！
+                    if (inWindup) {
+                        tp.hipY = 0.62;
+                        tp.torsoX = 0.35; tp.torsoY = 1.1;
+                        tp.rArmX = -0.25; tp.rArmY = 0.5; tp.rArmZ = -0.85;
+                        tp.swordX = 0.45; tp.swordZ = 1.2;
+                        lerpSpeed = 14;
+                    } else {
+                        tp.hipY = 0.60;
+                        tp.torsoX = 0.38; tp.torsoY = -1.35;
+                        tp.rArmX = -0.95; tp.rArmY = -0.6; tp.rArmZ = 0.9;
+                        tp.swordX = 0.1; tp.swordZ = 1.4;
+                        lerpSpeed = 34;
+                    }
+                } else if (step.type === 'slam') {
+                    // 二阶段跃空重劈！
+                    if (inWindup) {
+                        tp.hipY = 1.05;
+                        tp.torsoX = -0.28;
+                        tp.rArmX = -2.85; tp.lArmX = -2.75;
+                        tp.swordX = -0.45;
+                        lerpSpeed = 16;
+                    } else {
+                        tp.hipY = 0.68;
+                        tp.torsoX = 0.58;
+                        tp.rArmX = -0.65; tp.lArmX = -0.65;
+                        tp.swordX = 0.55;
+                        lerpSpeed = 32;
+                    }
+                } else {
+                    // 常规快慢连斩 / 剑圣四连 / 龙闪
+                    const flip = (ent.moveStep % 2 === 1) ? -1 : 1;
+                    if (inWindup) {
+                        tp.hipY = 0.88;
+                        tp.torsoX = -0.14; tp.torsoY = 0.72 * flip;
+                        tp.rArmX = -2.4; tp.rArmZ = -0.55 * flip;
+                        tp.swordX = -0.4;
+                        lerpSpeed = 16;
+                    } else {
+                        tp.hipY = 0.80;
+                        tp.torsoX = 0.34; tp.torsoY = -0.82 * flip;
+                        tp.rArmX = -0.85; tp.rArmY = -0.5 * flip; tp.rArmZ = 0.35 * flip;
+                        tp.swordX = 0.45;
+                        lerpSpeed = 32;
+                    }
+                }
+            }
+        }
+
+        // 刀刃完美弹反瞬间的金光高亮反馈
+        if (!this.isBoss) {
+            this.matBlade.emissive.setHex(ent.deflectWindow > 0 ? 0xffc83d : 0x1a1408);
+            this.matBlade.emissiveIntensity = ent.deflectWindow > 0 ? 1.15 : 0.4;
+        } else if (this.auraRing) {
+            const targetOp = (ent.phase === 2 && ent.state !== 'dead') ? (0.28 + Math.sin(nowSec * 5) * 0.1) : 0;
+            this.auraRing.material.opacity += (targetOp - this.auraRing.material.opacity) * Math.min(1, dt * 4);
+            this.auraRing.rotation.z = nowSec * 1.4;
+        }
+
+        // 平滑插值所有骨骼关节
+        const k = Math.min(1, dt * lerpSpeed);
+        this.hips.position.y += (tp.hipY - this.hips.position.y) * k;
+        this.torso.rotation.x += (tp.torsoX - this.torso.rotation.x) * k;
+        this.torso.rotation.y += (tp.torsoY - this.torso.rotation.y) * k;
+        this.torso.rotation.z += (tp.torsoZ - this.torso.rotation.z) * k;
+        this.rightArm.rotation.x += (tp.rArmX - this.rightArm.rotation.x) * k;
+        this.rightArm.rotation.y += (tp.rArmY - this.rightArm.rotation.y) * k;
+        this.rightArm.rotation.z += (tp.rArmZ - this.rightArm.rotation.z) * k;
+        this.leftArm.rotation.x += (tp.lArmX - this.leftArm.rotation.x) * k;
+        this.leftArm.rotation.y += (tp.lArmY - this.leftArm.rotation.y) * k;
+        this.leftArm.rotation.z += (tp.lArmZ - this.leftArm.rotation.z) * k;
+        this.swordPivot.rotation.x += (tp.swordX - this.swordPivot.rotation.x) * k;
+        this.swordPivot.rotation.y += (tp.swordY - this.swordPivot.rotation.y) * k;
+        this.swordPivot.rotation.z += (tp.swordZ - this.swordPivot.rotation.z) * k;
+
+        // 同步根位置与朝向
+        this.root.position.set(ent.x, ent.y, ent.z);
+        this.root.rotation.y = ent.yaw;
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * 3. 3D 战斗粒子、刀光弧面、星芒闪耀、冲击波与动态弹反点光源管理器
+ * -------------------------------------------------------------------------- */
+class VFX3DManager {
+    constructor(scene) {
+        this.scene = scene;
+        this.particles = [];
+        this.meshes = [];
+
+        // 共享基础几何体提升性能
+        this.geoSpark = new THREE.BoxGeometry(0.032, 0.032, 0.28);
+        this.geoDrop = new THREE.SphereGeometry(0.055, 5, 4);
+        this.geoPetal = new THREE.PlaneGeometry(0.14, 0.09);
+
+        // 动态弹反金橙点光源（拼刀瞬间照亮两人盔甲与四周银色芦苇！）
+        this.clashLight = new THREE.PointLight(0xffb833, 0, 14, 1.5);
+        this.scene.add(this.clashLight);
+        this.clashLightLife = 0;
+    }
+
+    clear() {
+        for (const p of this.particles) this.scene.remove(p.mesh);
+        for (const m of this.meshes) this.scene.remove(m.mesh);
+        this.particles = [];
+        this.meshes = [];
+        this.clashLight.intensity = 0;
+        this.clashLightLife = 0;
+    }
+
+    // 3D 完美弹反璀璨星爆火花 + 立体十字星芒 + 动态火光照明
+    spawnDeflectSparks(pos, isBig = true) {
+        // 触发动态金光照亮全场
+        this.clashLight.position.copy(pos);
+        this.clashLight.color.setHex(isBig ? 0xffcf4d : 0xff922b);
+        this.clashLight.intensity = isBig ? 9.5 : 4.5;
+        this.clashLightLife = isBig ? 0.22 : 0.14;
+
+        // 3D 扩张冲击波圆环
+        const ringGeo = new THREE.RingGeometry(0.12, isBig ? 0.28 : 0.2, 24);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: isBig ? 0xffe07d : 0xff9e44,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.95
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.copy(pos);
+        ring.lookAt(pos.x, pos.y + 0.5, pos.z + 5);
+        this.scene.add(ring);
+        this.meshes.push({
+            mesh: ring, type: 'ring',
+            life: isBig ? 0.22 : 0.16, maxLife: isBig ? 0.22 : 0.16,
+            maxScale: isBig ? 8.5 : 4.5
+        });
+
+        // 立体双十字星芒
+        if (isBig) {
+            const starGroup = new THREE.Group();
+            starGroup.position.copy(pos);
+            const sMat = new THREE.MeshBasicMaterial({ color: 0xfff8dc, transparent: true, opacity: 1 });
+            const bar1 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 0.06), sMat);
+            const bar2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.06), sMat);
+            const bar3 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 2.2), sMat);
+            starGroup.add(bar1, bar2, bar3);
+            this.scene.add(starGroup);
+            this.meshes.push({
+                mesh: starGroup, type: 'star', mat: sMat,
+                life: 0.15, maxLife: 0.15, maxScale: 1.5
+            });
+        }
+
+        // 物理飞溅火花（带重力与地面弹跳！）
+        const count = isBig ? 34 : 16;
+        for (let i = 0; i < count; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: Math.random() > 0.35 ? 0xffd046 : 0xfff7d6,
+                transparent: true,
+                opacity: 1
+            });
+            const m = new THREE.Mesh(this.geoSpark, mat);
+            m.position.copy(pos);
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.random() - 0.35) * Math.PI;
+            const spd = (isBig ? 5.5 : 3.2) + Math.random() * (isBig ? 9.5 : 5.5);
+            const vx = Math.cos(theta) * Math.cos(phi) * spd;
+            const vy = Math.sin(phi) * spd + 2.8;
+            const vz = Math.sin(theta) * Math.cos(phi) * spd;
+            this.scene.add(m);
+            this.particles.push({
+                mesh: m, mat, type: 'spark',
+                vx, vy, vz,
+                life: 0.22 + Math.random() * 0.34,
+                maxLife: 0.56,
+                gravity: 16
+            });
+        }
+    }
+
+    // 3D 刀光弧面
+    spawnSlashArc(origin, yaw, tiltZ = 0, radius = 1.85, color = 0xeef6ff, thick = 0.28) {
+        const geo = new THREE.RingGeometry(radius - thick, radius, 20, 1, -Math.PI * 0.42, Math.PI * 0.84);
+        const mat = new THREE.MeshBasicMaterial({
+            color,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.85
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(origin);
+        // 旋转令圆弧水平切过前方，再叠加斜斩角度
+        mesh.rotation.order = 'YXZ';
+        mesh.rotation.y = yaw - Math.PI / 2;
+        mesh.rotation.x = Math.PI / 2 + tiltZ;
+        this.scene.add(mesh);
+        this.meshes.push({
+            mesh, mat, type: 'slash',
+            life: 0.14, maxLife: 0.14, maxScale: 1.18
+        });
+    }
+
+    // 十字斩刀柄星芒提示
+    spawnCrossGlint(pos) {
+        this.clashLight.position.copy(pos);
+        this.clashLight.color.setHex(0xe0f2fe);
+        this.clashLight.intensity = 8.0;
+        this.clashLightLife = 0.25;
+
+        const g = new THREE.Group();
+        g.position.copy(pos);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+        g.add(
+            new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.055, 0.055), mat),
+            new THREE.Mesh(new THREE.BoxGeometry(0.055, 2.6, 0.055), mat),
+            new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 2.6), mat)
+        );
+        this.scene.add(g);
+        this.meshes.push({ mesh: g, mat, type: 'star', life: 0.28, maxLife: 0.28, maxScale: 1.35 });
+    }
+
+    // 3D 血花喷溅
+    spawnBlood(pos, dirVec, count = 20) {
+        for (let i = 0; i < count; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: Math.random() > 0.3 ? 0xb91c1c : 0x5c080c,
+                transparent: true,
+                opacity: 0.92
+            });
+            const m = new THREE.Mesh(this.geoDrop, mat);
+            m.position.copy(pos);
+            const spd = 2.5 + Math.random() * 5.8;
+            const vx = dirVec.x * spd + (Math.random() - 0.5) * 3.8;
+            const vy = 1.8 + Math.random() * 4.2;
+            const vz = dirVec.z * spd + (Math.random() - 0.5) * 3.8;
+            this.scene.add(m);
+            this.particles.push({
+                mesh: m, mat, type: 'blood',
+                vx, vy, vz,
+                life: 0.35 + Math.random() * 0.45,
+                maxLife: 0.8,
+                gravity: 19
+            });
+        }
+    }
+
+    // 3D 樱花 / 伤药绿芒
+    spawnSakura(pos, count = 30, colorHex = 0xfda4af) {
+        for (let i = 0; i < count; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: colorHex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.92
+            });
+            const m = new THREE.Mesh(this.geoPetal, mat);
+            m.position.set(
+                pos.x + (Math.random() - 0.5) * 1.4,
+                pos.y + Math.random() * 1.2,
+                pos.z + (Math.random() - 0.5) * 1.4
+            );
+            this.scene.add(m);
+            this.particles.push({
+                mesh: m, mat, type: 'petal',
+                vx: (Math.random() - 0.5) * 3.6,
+                vy: 1.5 + Math.random() * 3.2,
+                vz: (Math.random() - 0.5) * 3.6,
+                life: 0.9 + Math.random() * 0.8,
+                maxLife: 1.7,
+                gravity: 2.2
+            });
+        }
+    }
+
+    update(dt, cameraPos) {
+        // 弹反动态火光衰减
+        if (this.clashLightLife > 0) {
+            this.clashLightLife -= dt;
+            this.clashLight.intensity = Math.max(0, this.clashLight.intensity * Math.pow(0.002, dt));
+        } else {
+            this.clashLight.intensity = 0;
+        }
+
+        // 更新立体特效网格
+        for (let i = this.meshes.length - 1; i >= 0; i--) {
+            const item = this.meshes[i];
+            item.life -= dt;
+            if (item.life <= 0) {
+                this.scene.remove(item.mesh);
+                this.meshes.splice(i, 1);
+                continue;
+            }
+            const t = 1 - item.life / item.maxLife;
+            if (item.type === 'ring') {
+                const s = 1 + t * item.maxScale;
+                item.mesh.scale.set(s, s, s);
+                item.mesh.lookAt(cameraPos);
+                item.mesh.material.opacity = 1 - t;
+            } else if (item.type === 'star') {
+                const s = 1.2 - t * 0.6;
+                item.mesh.scale.set(s, s, s);
+                item.mesh.rotation.z += dt * 4;
+                item.mat.opacity = 1 - t;
+            } else if (item.type === 'slash') {
+                const s = 1 + t * 0.18;
+                item.mesh.scale.set(s, s, s);
+                item.mat.opacity = (1 - t) * 0.85;
+            }
+        }
+
+        // 更新物理粒子
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.life -= dt;
+            if (p.life <= 0) {
+                this.scene.remove(p.mesh);
+                this.particles.splice(i, 1);
+                continue;
+            }
+            p.vy -= p.gravity * dt;
+            p.mesh.position.x += p.vx * dt;
+            p.mesh.position.y += p.vy * dt;
+            p.mesh.position.z += p.vz * dt;
+
+            // 火花地面弹跳
+            if (p.type === 'spark' && p.mesh.position.y < 0.04) {
+                p.mesh.position.y = 0.04;
+                p.vy = -p.vy * 0.45;
+                p.vx *= 0.72;
+                p.vz *= 0.72;
+            }
+            if (p.type === 'spark') {
+                // 朝向飞行速度方向拉长拖尾感
+                p.mesh.lookAt(
+                    p.mesh.position.x + p.vx,
+                    p.mesh.position.y + p.vy,
+                    p.mesh.position.z + p.vz
+                );
+            } else if (p.type === 'petal') {
+                p.mesh.rotation.x += dt * 4;
+                p.mesh.rotation.y += dt * 3;
+            }
+            p.mat.opacity = Math.min(1, (p.life / p.maxLife) * 1.4);
+        }
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * 4. 3D 剑气投射物（二阶段「秘传 · 龙闪」）
+ * -------------------------------------------------------------------------- */
+class DragonFlash3D {
+    constructor(scene, startPos, dirVec) {
+        this.scene = scene;
+        this.dir = dirVec.clone().normalize();
+        this.speed = 21.5;
+        this.life = 1.4;
+        this.hit = false;
+
+        this.group = new THREE.Group();
+        this.group.position.copy(startPos);
+        this.group.rotation.y = Math.atan2(this.dir.x, this.dir.z);
+
+        // 巨大竖直发光月牙剑气
+        const geo = new THREE.TorusGeometry(1.55, 0.14, 8, 22, Math.PI * 0.85);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xe0f2fe,
+            transparent: true,
+            opacity: 0.92
+        });
+        const arc = new THREE.Mesh(geo, mat);
+        arc.rotation.y = Math.PI / 2;
+        arc.rotation.z = -Math.PI * 0.42;
+        this.group.add(arc);
+
+        const light = new THREE.PointLight(0xbae6fd, 3.2, 8);
+        this.group.add(light);
+        this.scene.add(this.group);
+    }
+
+    update(dt) {
+        this.group.position.addScaledVector(this.dir, this.speed * dt);
+        this.life -= dt;
+    }
+
+    destroy() {
+        this.scene.remove(this.group);
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * 5. 3D 主游戏引擎（场景、动态芦苇、鼠标旋转相机、打铁判定与主循环）
+ * -------------------------------------------------------------------------- */
+class Sekiro3DGame {
+    constructor() {
+        this.canvas = document.getElementById('gl-canvas');
+        this.audio = new SekiroAudioEngine();
+
+        this.ARENA_RADIUS = 13.5;
+        this.mode = 'menu'; // menu | playing | paused | resurrect_wait | victory | defeat
+        this.charmless = false;
+        this.showTimingHud = true;
+
+        // 顿帧 / 慢动作 / 镜头参数
+        this.hitstop = 0;
+        this.slowMoTimer = 0;
+        this.shakeTime = 0;
+        this.shakeMag = 0;
+        this.camYawOffset = 0.24;     // 用户可自由鼠标旋转的水平偏角
+        this.camPitchOffset = 0.22;   // 用户可自由鼠标旋转的俯仰角
+        this.camDist = 6.2;
+        this.targetCamDist = 6.2;
+        this.camCurrentPos = new THREE.Vector3(0, 3.2, 9);
+        this.camLookTarget = new THREE.Vector3(0, 1.3, 0);
+
+        // 鼠标相机拖拽状态
+        this.isMouseDown = false;
+        this.dragButton = -1;
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
+
+        // 输入状态
+        this.keys = { fwd: false, back: false, left: false, right: false, guard: false, camLeft: false, camRight: false };
+        this.inputBuffer = { attack: 0, deflect: 0, dodge: 0, jump: 0 };
+
+        // 浮字列表（3D 坐标实时投影到屏幕）
+        this.floatTags = [];
+        this.projectiles = [];
+        this.tempVec = new THREE.Vector3();
+
+        this.stats = { deflects: 0, blocks: 0, mikiri: 0, stomps: 0, streak: 0, maxStreak: 0, elapsed: 0 };
+
+        this._initThreeScene();
+        this._buildEnvironment();
+        this._buildCharacters();
+        this.vfx = new VFX3DManager(this.scene);
+
+        this.resetMatchState();
+        this._bindEvents();
+        this._resize();
+    }
+
+    _initThreeScene() {
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x070b14);
+        this.scene.fog = new THREE.FogExp2(0x0a101d, 0.028);
+
+        this.camera = new THREE.PerspectiveCamera(54, 16 / 9, 0.1, 160);
+
+        this.renderer = new THREE.WebGLRenderer({
+            canvas: this.canvas,
+            antialias: true,
+            powerPreference: 'high-performance'
+        });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // 银月光照体系：冷蓝月光主光 + 幽暗环境半球光 + 边缘背光凸显轮廓
+        const hemi = new THREE.HemisphereLight(0x88a8d8, 0x10141c, 0.65);
+        this.scene.add(hemi);
+
+        const moonLight = new THREE.DirectionalLight(0xcbe2ff, 1.35);
+        moonLight.position.set(14, 24, -22);
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.width = 1024;
+        moonLight.shadow.mapSize.height = 1024;
+        moonLight.shadow.camera.near = 2;
+        moonLight.shadow.camera.far = 65;
+        const d = 16;
+        moonLight.shadow.camera.left = -d;
+        moonLight.shadow.camera.right = d;
+        moonLight.shadow.camera.top = d;
+        moonLight.shadow.camera.bottom = -d;
+        this.scene.add(moonLight);
+
+        // 暖色微弱补光，让狼的橙衣与太刀反光更有层次
+        const rimLight = new THREE.DirectionalLight(0xffe0b2, 0.32);
+        rimLight.position.set(-10, 7, 14);
+        this.scene.add(rimLight);
+    }
+
+    _buildEnvironment() {
+        // 1. 决斗地面（泥土与月光微湿石地）
+        const ground = new THREE.Mesh(
+            new THREE.CircleGeometry(46, 48),
+            new THREE.MeshStandardMaterial({ color: 0x131922, roughness: 0.92, metalness: 0.08 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        this.scene.add(ground);
+
+        // 决斗场边界微光石环（提示可活动范围）
+        const arenaBorder = new THREE.Mesh(
+            new THREE.RingGeometry(this.ARENA_RADIUS - 0.08, this.ARENA_RADIUS + 0.08, 64),
+            new THREE.MeshBasicMaterial({ color: 0x64748b, side: THREE.DoubleSide, transparent: true, opacity: 0.22 })
+        );
+        arenaBorder.rotation.x = -Math.PI / 2;
+        arenaBorder.position.y = 0.02;
+        this.scene.add(arenaBorder);
+
+        // 2. 皎洁银月与月晕
+        const moon = new THREE.Mesh(
+            new THREE.SphereGeometry(5.5, 24, 20),
+            new THREE.MeshBasicMaterial({ color: 0xf0f6ff })
+        );
+        moon.position.set(22, 26, -58);
+        this.scene.add(moon);
+
+        const moonHalo = new THREE.Mesh(
+            new THREE.CircleGeometry(13.5, 32),
+            new THREE.MeshBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.12 })
+        );
+        moonHalo.position.set(21.6, 25.6, -57);
+        moonHalo.lookAt(0, 2, 0);
+        this.scene.add(moonHalo);
+
+        // 3. 远山与苇名城天守阁剪影
+        const mountainMat = new THREE.MeshBasicMaterial({ color: 0x0b111c });
+        for (let i = 0; i < 14; i++) {
+            const ang = (i / 14) * Math.PI * 2;
+            const dist = 42 + (i % 3) * 8;
+            const h = 9 + (i * 7 % 11);
+            const r = 10 + (i * 5 % 8);
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), mountainMat);
+            cone.position.set(Math.cos(ang) * dist, h / 2 - 0.5, Math.sin(ang) * dist);
+            this.scene.add(cone);
+        }
+
+        // 苇名城天守阁三层飞檐轮廓
+        const castle = new THREE.Group();
+        castle.position.set(-12, 0, -40);
+        const cMat = new THREE.MeshBasicMaterial({ color: 0x090d16 });
+        const base = new THREE.Mesh(new THREE.BoxGeometry(5.5, 7, 5.5), cMat);
+        base.position.y = 3.5;
+        castle.add(base);
+        for (let t = 0; t < 3; t++) {
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(5.2 - t * 1.1, 1.8, 4), cMat);
+            roof.rotation.y = Math.PI / 4;
+            roof.position.y = 7.4 + t * 2.2;
+            castle.add(roof);
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4 - t * 0.75, 1.8, 3.4 - t * 0.75), cMat);
+            floor.position.y = 6.8 + t * 2.2;
+            castle.add(floor);
+        }
+        this.scene.add(castle);
+
+        // 4. 520 株 3D 银白芦苇荡（使用 InstancedMesh 保持 60 FPS 流畅摇曳！）
+        this.reedCount = 520;
+        const stalkGeo = new THREE.ConeGeometry(0.032, 1.45, 4);
+        stalkGeo.translate(0, 0.72, 0);
+        const stalkMat = new THREE.MeshStandardMaterial({ color: 0x6b7c8a, roughness: 0.9 });
+
+        const plumeGeo = new THREE.ConeGeometry(0.068, 0.42, 5);
+        plumeGeo.translate(0, 1.48, 0);
+        const plumeMat = new THREE.MeshStandardMaterial({
+            color: 0xdbe5f0,
+            roughness: 0.85,
+            emissive: 0x1e293b,
+            emissiveIntensity: 0.35
+        });
+
+        this.reedStalks = new THREE.InstancedMesh(stalkGeo, stalkMat, this.reedCount);
+        this.reedPlumes = new THREE.InstancedMesh(plumeGeo, plumeMat, this.reedCount);
+        this.reedData = [];
+        this.reedDummy = new THREE.Object3D();
+
+        for (let i = 0; i < this.reedCount; i++) {
+            // 场中央略稀疏方便清晰读招，周围越密越有芦苇海沉浸感
+            const r = Math.pow(Math.random(), 0.65) * 24 + 2.2;
+            const ang = Math.random() * Math.PI * 2;
+            const x = Math.cos(ang) * r;
+            const z = Math.sin(ang) * r;
+            const scaleY = (r < 9 ? 0.55 : 0.85) + Math.random() * 0.65;
+            this.reedData.push({
+                x, z, scaleY,
+                phase: Math.random() * Math.PI * 2,
+                rotY: Math.random() * Math.PI * 2
+            });
+        }
+        this.scene.add(this.reedStalks);
+        this.scene.add(this.reedPlumes);
+
+        // 5. 月夜飘散的白色芦苇絮（3D Points）
+        const fluffCount = 180;
+        const posArr = new Float32Array(fluffCount * 3);
+        for (let i = 0; i < fluffCount; i++) {
+            posArr[i * 3] = (Math.random() - 0.5) * 34;
+            posArr[i * 3 + 1] = 0.4 + Math.random() * 6.5;
+            posArr[i * 3 + 2] = (Math.random() - 0.5) * 34;
+        }
+        const fluffGeo = new THREE.BufferGeometry();
+        fluffGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+        const fluffMat = new THREE.PointsMaterial({
+            color: 0xe2ecfa,
+            size: 0.085,
+            transparent: true,
+            opacity: 0.62
+        });
+        this.fluffPoints = new THREE.Points(fluffGeo, fluffMat);
+        this.scene.add(this.fluffPoints);
+    }
+
+    _buildCharacters() {
+        this.playerRig = new SamuraiRig3D(false);
+        this.bossRig = new SamuraiRig3D(true);
+        this.scene.add(this.playerRig.root);
+        this.scene.add(this.bossRig.root);
+    }
+
+    resetMatchState() {
+        for (const pr of this.projectiles) pr.destroy();
+        this.projectiles = [];
+        this.vfx.clear();
+        this._clearFloatTags();
+
+        this.hitstop = 0;
+        this.slowMoTimer = 0;
+        this.shakeTime = 0;
+        this.targetCamDist = 6.2;
+        this.stats = { deflects: 0, blocks: 0, mikiri: 0, stomps: 0, streak: 0, maxStreak: 0, elapsed: 0 };
+
+        // 狼（玩家）3D 实体状态
+        this.player = {
+            x: 0, y: 0, z: 4.2,
+            vx: 0, vy: 0, vz: 0,
+            yaw: Math.PI,
+            hp: 100, maxHp: 100,
+            posture: 0, maxPosture: 100, postureRegenDelay: 0,
+            heals: 3, resurrects: 1,
+            state: 'idle',
+            stateTimer: 0,
+            comboStep: 0, attackHitDealt: false, attackDur: 0,
+            deflectWindow: 0, guardSpamCount: 0, guardSpamDecay: 0, isGuarding: false,
+            stompDone: false, mikiriWindow: 0, invulnTimer: 0
+        };
+
+        // 剑圣 · 苇名一心（Boss）3D 实体状态
+        this.boss = {
+            x: 0, y: 0, z: -4.2,
+            vx: 0, vy: 0, vz: 0,
+            yaw: 0,
+            phase: 1, deathblowsLeft: 2,
+            hp: 100, maxHp: 100,
+            posture: 0, maxPosture: 100, postureRegenDelay: 0,
+            state: 'idle', stateTimer: 0.7,
+            aiCooldown: 0.75,
+            hitsBlockedInRow: 0,
+            currentMove: null, moveStep: 0, stepTimer: 0,
+            stepHitDealt: false, flashTriggered: false
+        };
+
+        this._updateHUD();
+    }
+
+    /* ----------------------------------------------------------------------
+     * 苇名一心 3D 招式表（精准读招前摇、快慢刀、十字斩、危技与 3D 跃空劈！）
+     * ---------------------------------------------------------------------- */
+    getBossMoveSet() {
+        return {
+            tripleSlash: {
+                name: '苇名三连斩',
+                steps: [
+                    { windup: 0.34, active: 0.11, recover: 0.12, lunge: 8.5, dmg: 16, postureDmg: 18, type: 'normal', range: 3.1, tilt: 0.35 },
+                    { windup: 0.25, active: 0.11, recover: 0.16, lunge: 8.0, dmg: 16, postureDmg: 18, type: 'normal', range: 3.1, tilt: -0.35 },
+                    { windup: 0.44, active: 0.12, recover: 0.48, lunge: 11.2, dmg: 24, postureDmg: 28, type: 'heavy', range: 3.5, tilt: 0.12 }
+                ]
+            },
+            counterCombo: {
+                name: '一心反斩',
+                steps: [
+                    { windup: 0.27, active: 0.10, recover: 0.14, lunge: 8.5, dmg: 18, postureDmg: 20, type: 'normal', range: 3.1, tilt: 0.25 },
+                    { windup: 0.34, active: 0.11, recover: 0.44, lunge: 9.5, dmg: 20, postureDmg: 24, type: 'normal', range: 3.2, tilt: -0.25 }
+                ]
+            },
+            ashinaCross: {
+                name: '苇名十字斩',
+                isCross: true,
+                steps: [
+                    { windup: 0.88, flashAt: 0.56, active: 0.10, recover: 0.05, lunge: 23.0, dmg: 22, postureDmg: 24, type: 'heavy', range: 3.8, tilt: 0.5 },
+                    { windup: 0.15, active: 0.10, recover: 0.62, lunge: 8.0, dmg: 22, postureDmg: 24, type: 'heavy', range: 3.6, tilt: -0.5 }
+                ]
+            },
+            perilousThrust: {
+                name: '【危】突刺',
+                steps: [
+                    { windup: 0.68, active: 0.15, recover: 0.62, lunge: 21.5, dmg: 32, postureDmg: 42, type: 'thrust', range: 4.1, tilt: 0 }
+                ]
+            },
+            perilousSweep: {
+                name: '【危】下段横扫',
+                steps: [
+                    { windup: 0.64, active: 0.15, recover: 0.58, lunge: 9.5, dmg: 28, postureDmg: 38, type: 'sweep', range: 3.7, tilt: 0 }
+                ]
+            },
+            bumpThrust: {
+                name: '肩撞突刺',
+                steps: [
+                    { windup: 0.28, active: 0.10, recover: 0.16, lunge: 8.0, dmg: 10, postureDmg: 22, type: 'normal', range: 2.7, tilt: 0 },
+                    { windup: 0.62, active: 0.15, recover: 0.60, lunge: 19.5, dmg: 32, postureDmg: 42, type: 'thrust', range: 4.0, tilt: 0 }
+                ]
+            },
+            phase2Flurry: {
+                name: '剑圣四连斩',
+                steps: [
+                    { windup: 0.30, active: 0.10, recover: 0.09, lunge: 7.8, dmg: 15, postureDmg: 17, type: 'normal', range: 3.2, tilt: 0.4 },
+                    { windup: 0.22, active: 0.10, recover: 0.09, lunge: 7.8, dmg: 15, postureDmg: 17, type: 'normal', range: 3.2, tilt: -0.4 },
+                    { windup: 0.23, active: 0.10, recover: 0.15, lunge: 8.5, dmg: 16, postureDmg: 18, type: 'normal', range: 3.3, tilt: 0.2 },
+                    { windup: 0.45, active: 0.12, recover: 0.55, lunge: 12.5, dmg: 26, postureDmg: 30, type: 'heavy', range: 3.6, tilt: 0 }
+                ]
+            },
+            jumpingSlam: {
+                name: '剑圣跃空劈',
+                steps: [
+                    { windup: 0.62, active: 0.14, recover: 0.58, lunge: 16.5, jumpVel: 9.2, dmg: 28, postureDmg: 32, type: 'slam', range: 3.7, tilt: 1.45 }
+                ]
+            },
+            dragonFlash: {
+                name: '秘传 · 龙闪',
+                steps: [
+                    { windup: 0.72, flashAt: 0.42, active: 0.12, recover: 0.64, lunge: 3.5, dmg: 26, postureDmg: 28, type: 'wave', range: 3.2, tilt: 1.5 }
+                ]
+            }
+        };
+    }
+
+    /* ----------------------------------------------------------------------
+     * 玩家动作控制（含攻击前摇取消转弹反、3D 识破、3D 空中踩头）
+     * ---------------------------------------------------------------------- */
+    _vecToBoss(out) {
+        out.set(this.boss.x - this.player.x, 0, this.boss.z - this.player.z);
+        const len = out.length();
+        if (len > 0.001) out.divideScalar(len);
+        else out.set(0, 0, -1);
+        return len;
+    }
+
+    triggerAttack() {
+        const p = this.player;
+        const b = this.boss;
+        if (this.mode !== 'playing') return;
+
+        const dir = new THREE.Vector3();
+        const dist = this._vecToBoss(dir);
+
+        // 优先触发【3D 忍杀 Deathblow】
+        if (b.state === 'posture_broken' && dist < 4.2 && p.state !== 'hitstun' && p.state !== 'posture_broken') {
+            this._executeDeathblow();
+            return;
+        }
+
+        const canChain = p.state === 'attack' && p.stateTimer < 0.14;
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard' || canChain) {
+            p.yaw = Math.atan2(dir.x, dir.z);
+            p.state = 'attack';
+            p.comboStep = canChain ? ((p.comboStep + 1) % 3) : 0;
+            p.attackDur = p.comboStep === 2 ? 0.36 : 0.30;
+            p.stateTimer = p.attackDur;
+            p.attackHitDealt = false;
+            p.isGuarding = false;
+            const lunge = p.comboStep === 2 ? 7.8 : 5.6;
+            p.vx = dir.x * lunge;
+            p.vz = dir.z * lunge;
+            this.audio.playSwing(p.comboStep === 2);
+        } else {
+            this.inputBuffer.attack = 0.14;
+        }
+    }
+
+    triggerDeflectPress() {
+        const p = this.player;
+        if (this.mode !== 'playing') return;
+        this.keys.guard = true;
+
+        // 攻击起手瞬间取消转防御！
+        const canCancel = p.state === 'attack' && !p.attackHitDealt && p.stateTimer > p.attackDur * 0.45;
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard' || canCancel) {
+            p.state = 'guard';
+            p.isGuarding = true;
+            const dir = new THREE.Vector3();
+            this._vecToBoss(dir);
+            p.yaw = Math.atan2(dir.x, dir.z);
+
+            const windows = [0.19, 0.14, 0.095, 0.065];
+            p.deflectWindow = windows[Math.min(p.guardSpamCount, windows.length - 1)];
+            p.guardSpamCount++;
+            p.guardSpamDecay = 0.48;
+            p.vx *= 0.3;
+            p.vz *= 0.3;
+        } else {
+            this.inputBuffer.deflect = 0.12;
+        }
+    }
+
+    triggerDeflectRelease() {
+        this.keys.guard = false;
+        if (this.player.state === 'guard') {
+            this.player.state = 'idle';
+            this.player.isGuarding = false;
+        }
+    }
+
+    triggerDodgeOrMikiri() {
+        const p = this.player;
+        if (this.mode !== 'playing') return;
+
+        const canRecover = p.state === 'posture_broken' && p.stateTimer < 0.35;
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard' || (p.state === 'attack' && p.stateTimer < 0.12) || canRecover) {
+            const toBoss = new THREE.Vector3();
+            this._vecToBoss(toBoss);
+            const rightVec = new THREE.Vector3(-toBoss.z, 0, toBoss.x);
+
+            // 计算垫步方向（未按方向键时默认直冲一心，方便一键精准识破！）
+            const moveDir = new THREE.Vector3();
+            if (this.keys.fwd) moveDir.add(toBoss);
+            if (this.keys.back) moveDir.sub(toBoss);
+            if (this.keys.right) moveDir.add(rightVec);
+            if (this.keys.left) moveDir.sub(rightVec);
+            const isForward = moveDir.lengthSq() < 0.01 || moveDir.dot(toBoss) > 0.25;
+            if (moveDir.lengthSq() < 0.01) moveDir.copy(toBoss);
+            else moveDir.normalize();
+
+            p.yaw = Math.atan2(toBoss.x, toBoss.z);
+            p.state = 'dodge';
+            p.stateTimer = 0.28;
+            p.isGuarding = false;
+            p.vx = moveDir.x * 13.5;
+            p.vz = moveDir.z * 13.5;
+            p.invulnTimer = 0.17;
+            p.mikiriWindow = isForward ? 0.28 : 0.16;
+            this.audio.playStep();
+        } else {
+            this.inputBuffer.dodge = 0.14;
+        }
+    }
+
+    triggerJumpOrStomp() {
+        const p = this.player;
+        const b = this.boss;
+        if (this.mode !== 'playing') return;
+
+        // 空中二段按跳：触发【3D 踩头 Head Stomp】！
+        if (p.state === 'jump' && !p.stompDone) {
+            const dist = Math.hypot(b.x - p.x, b.z - p.z);
+            if (dist < 2.8 && p.y > 0.45) {
+                p.stompDone = true;
+                p.vy = 8.4;
+                const dir = new THREE.Vector3();
+                this._vecToBoss(dir);
+                p.vx = -dir.x * 4.2;
+                p.vz = -dir.z * 4.2;
+
+                this.audio.playBlock(false);
+                this.audio.playStep();
+
+                const isSweep = b.state === 'attack' && b.currentMove &&
+                    b.currentMove.steps[b.moveStep] && b.currentMove.steps[b.moveStep].type === 'sweep';
+                this._damageBossPosture(isSweep ? 32 : 12);
+                this.stats.stomps++;
+                this.hitstop = isSweep ? 0.085 : 0.045;
+                this.shake(isSweep ? 0.35 : 0.15, 0.18);
+
+                const headPos = new THREE.Vector3(b.x, b.y + 1.9, b.z);
+                this.vfx.spawnDeflectSparks(headPos, isSweep);
+                this.spawnFloatTag(headPos, isSweep ? '破招 · 踩头！' : '踩头', '#fde047', isSweep ? 24 : 18);
+
+                if (isSweep && b.state !== 'posture_broken') {
+                    b.state = 'guard_stun';
+                    b.stateTimer = 0.45;
+                    b.currentMove = null;
+                }
+                return;
+            }
+        }
+
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard') {
+            p.state = 'jump';
+            p.isGuarding = false;
+            p.vy = 9.4;
+            p.stompDone = false;
+            this.audio.playStep();
+        } else {
+            this.inputBuffer.jump = 0.12;
+        }
+    }
+
+    triggerHeal() {
+        const p = this.player;
+        if (this.mode !== 'playing') return;
+        if (p.heals <= 0 || p.hp >= p.maxHp) return;
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard') {
+            p.heals--;
+            p.state = 'heal';
+            p.stateTimer = 0.62;
+            p.isGuarding = false;
+            p.vx = 0; p.vz = 0;
+            p.hp = Math.min(p.maxHp, p.hp + 55);
+            this.audio.playHeal();
+            this.vfx.spawnSakura(new THREE.Vector3(p.x, 1.1, p.z), 22, 0x6ee7b7);
+            this.spawnFloatTag(new THREE.Vector3(p.x, 2.2, p.z), '伤药葫芦 +HP', '#6ee7b7', 17);
+            this._updateHUD();
+
+            // 经典的只狼“读喝药”突刺！
+            const dist = Math.hypot(this.boss.x - p.x, this.boss.z - p.z);
+            if ((this.boss.state === 'idle' || this.boss.state === 'stalk') && dist > 4.2 && Math.random() < 0.65) {
+                this._startBossMove('perilousThrust');
+            }
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * 忍杀处决与二阶段切换
+     * ---------------------------------------------------------------------- */
+    _executeDeathblow() {
+        const p = this.player;
+        const b = this.boss;
+        const dir = new THREE.Vector3();
+        this._vecToBoss(dir);
+
+        p.yaw = Math.atan2(dir.x, dir.z);
+        p.x = b.x - dir.x * 1.45;
+        p.z = b.z - dir.z * 1.45;
+        p.vx = 0; p.vz = 0;
+        p.state = 'deathblow';
+        p.stateTimer = 0.95;
+
+        b.state = 'deathblow_victim';
+        b.stateTimer = 0.95;
+        b.vx = 0; b.vz = 0;
+        b.deathblowsLeft--;
+
+        this.audio.playDeathblow();
+        this.hitstop = 0.14;
+        this.slowMoTimer = 0.55;
+        this.shake(0.55, 0.42);
+        this.targetCamDist = 3.8; // 镜头推近特写！
+        this._triggerFlash('rgba(220, 38, 38, 0.42)');
+
+        const chest = new THREE.Vector3(b.x, 1.35, b.z);
+        this.vfx.spawnBlood(chest, dir, 48);
+        this.vfx.spawnSlashArc(chest, p.yaw, 0.4, 2.2, 0xff2a32, 0.45);
+        this.showKanji('忍殺', b.deathblowsLeft === 0 ? 'SHINOBI EXECUTION' : '一阶段破', '#dc2626', 1100);
+        this._updateHUD();
+    }
+
+    _finishDeathblow() {
+        const b = this.boss;
+        this.targetCamDist = 6.2;
+
+        if (b.deathblowsLeft <= 0) {
+            b.state = 'dead';
+            b.hp = 0;
+            this.mode = 'victory';
+            this.showKanji('死闘終結', 'SHINOBI EXECUTION · 剑圣陨落', '#f59e0b', 2800);
+            this.vfx.spawnSakura(new THREE.Vector3(b.x, 1.2, b.z), 48, 0xfde68a);
+            this._updateHUD();
+            setTimeout(() => this._showEndModal(true), 1800);
+        } else {
+            // 进入第二阶段：剑圣 · 真意！
+            b.phase = 2;
+            b.hp = b.maxHp;
+            b.posture = 0;
+            b.state = 'phase_transition';
+            b.stateTimer = 1.05;
+            const dir = new THREE.Vector3();
+            this._vecToBoss(dir);
+            b.vx = dir.x * 8.5;
+            b.vz = dir.z * 8.5;
+
+            this.audio.playPerilous();
+            this.vfx.spawnDeflectSparks(new THREE.Vector3(b.x, 1.3, b.z), true);
+            this.spawnFloatTag(new THREE.Vector3(b.x, 2.5, b.z), '「来吧！只狼！」', '#e0f2fe', 24);
+            this._updateHUD();
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * 玩家进攻 -> 一心格挡/完美招架反击 循环核心
+     * ---------------------------------------------------------------------- */
+    _resolvePlayerAttackHit() {
+        const p = this.player;
+        const b = this.boss;
+        const dir = new THREE.Vector3();
+        const dist = this._vecToBoss(dir);
+        if (dist > 3.25) return;
+
+        const clashPos = new THREE.Vector3(
+            (p.x + b.x) * 0.5,
+            1.32,
+            (p.z + b.z) * 0.5
+        );
+
+        const bossVulnerable =
+            b.state === 'guard_stun' ||
+            b.state === 'posture_broken' ||
+            (b.state === 'attack' && b.currentMove && b.stepTimer > 0.22 && b.moveStep === 0 && !b.currentMove.isCross);
+
+        if (bossVulnerable) {
+            this.audio.playHitFlesh(p.comboStep === 2);
+            this.vfx.spawnBlood(new THREE.Vector3(b.x, 1.3, b.z), dir, 18);
+            this.hitstop = 0.05;
+            this.shake(0.18, 0.12);
+            b.hp = Math.max(0, b.hp - (p.comboStep === 2 ? 12 : 8.5));
+            this._damageBossPosture(p.comboStep === 2 ? 15 : 10);
+            b.hitsBlockedInRow = 0;
+
+            if (b.state === 'attack' && b.currentMove.steps[0].type === 'normal' && b.stepTimer > 0.18) {
+                b.state = 'guard_stun';
+                b.stateTimer = 0.25;
+                b.currentMove = null;
+            }
+            if (b.hp <= 0 && b.state !== 'posture_broken') this._breakBossPosture();
+            this._updateHUD();
+            return;
+        }
+
+        if (b.state === 'attack') {
+            this.audio.playHitFlesh(false);
+            this.vfx.spawnBlood(new THREE.Vector3(b.x, 1.3, b.z), dir, 12);
+            b.hp = Math.max(0, b.hp - 6.5);
+            this._damageBossPosture(7);
+            if (b.hp <= 0) this._breakBossPosture();
+            this._updateHUD();
+            return;
+        }
+
+        // 打铁核心：格挡积累 -> 触发一心完美招架反击！
+        b.yaw = Math.atan2(-dir.x, -dir.z);
+        b.hitsBlockedInRow++;
+        const parryThreshold = b.phase === 2 ? (Math.random() < 0.6 ? 2 : 3) : (Math.random() < 0.45 ? 2 : 3);
+
+        if (b.hitsBlockedInRow >= parryThreshold) {
+            b.hitsBlockedInRow = 0;
+            this.audio.playDeflect(2, true);
+            this.vfx.spawnDeflectSparks(clashPos, true);
+            this.hitstop = 0.068;
+            this.shake(0.24, 0.14);
+            this._damageBossPosture(5);
+            this.spawnFloatTag(clashPos.clone().add(new THREE.Vector3(0, 0.6, 0)), '一心招架 · 转守！', '#fb923c', 17);
+
+            const pool = b.phase === 2
+                ? ['counterCombo', 'phase2Flurry', 'bumpThrust', 'perilousSweep']
+                : ['counterCombo', 'tripleSlash', 'bumpThrust'];
+            this._startBossMove(pool[Math.floor(Math.random() * pool.length)]);
+        } else {
+            this.audio.playBlock(true);
+            this.vfx.spawnDeflectSparks(clashPos, false);
+            this.hitstop = 0.032;
+            this.shake(0.1, 0.08);
+            b.vx = dir.x * 3.0;
+            b.vz = dir.z * 3.0;
+            this._damageBossPosture(9.5);
+            b.aiCooldown = Math.max(b.aiCooldown, 0.25);
+        }
+        this._updateHUD();
+    }
+
+    /* ----------------------------------------------------------------------
+     * Boss 进攻命中玩家（识破 / 跳跃闪横扫 / 完美弹反 / 普通格挡 / 受击）
+     * ---------------------------------------------------------------------- */
+    _resolveBossAttackHit(step, isProjectile = false) {
+        const p = this.player;
+        const b = this.boss;
+        const dirToBoss = new THREE.Vector3();
+        this._vecToBoss(dirToBoss);
+
+        const clashPos = isProjectile
+            ? new THREE.Vector3(p.x + dirToBoss.x * 0.7, p.y + 1.3, p.z + dirToBoss.z * 0.7)
+            : new THREE.Vector3((p.x + b.x) * 0.5, p.y + 1.32, (p.z + b.z) * 0.5);
+
+        // 1. 【危】突刺 -> 触发 3D 识破 Mikiri Counter!
+        if (step.type === 'thrust' && p.mikiriWindow > 0) {
+            this.audio.playMikiri();
+            this.hitstop = 0.13;
+            this.slowMoTimer = 0.26;
+            this.shake(0.45, 0.28);
+            this.vfx.spawnDeflectSparks(new THREE.Vector3(b.x - dirToBoss.x * 0.8, 0.7, b.z - dirToBoss.z * 0.8), true);
+            this.spawnFloatTag(new THREE.Vector3(p.x, 2.3, p.z), '識破 · MIKIRI!', '#ff4d4f', 26);
+
+            p.state = 'mikiri_anim';
+            p.stateTimer = 0.38;
+            p.vx = 0; p.vz = 0;
+            p.invulnTimer = 0.45;
+            p.x = b.x - dirToBoss.x * 1.65;
+            p.z = b.z - dirToBoss.z * 1.65;
+
+            b.state = 'guard_stun';
+            b.stateTimer = 0.75;
+            b.vx = 0; b.vz = 0;
+            b.currentMove = null;
+            this._damageBossPosture(36);
+            this.stats.mikiri++;
+            this.stats.streak++;
+            this._updateHUD();
+            return true;
+        }
+
+        // 2. 【危】下段横扫 -> 跳跃完全免疫
+        if (step.type === 'sweep' && p.y > 0.55) return false;
+
+        // 3. 普通垫步无敌帧躲避
+        if (p.invulnTimer > 0 && step.type !== 'sweep') {
+            this.spawnFloatTag(new THREE.Vector3(p.x, 2.1, p.z), '闪避', '#93c5fd', 16);
+            return false;
+        }
+
+        // 4. 【核心：完美弹反 Deflect】
+        const canDeflect = step.type !== 'sweep';
+        if (canDeflect && p.deflectWindow > 0) {
+            this.stats.deflects++;
+            this.stats.streak++;
+            if (this.stats.streak > this.stats.maxStreak) this.stats.maxStreak = this.stats.streak;
+
+            this.audio.playDeflect(this.stats.streak, false);
+            this.vfx.spawnDeflectSparks(clashPos, true);
+            this.spawnFloatTag(
+                new THREE.Vector3(p.x, p.y + 2.2, p.z),
+                this.stats.streak >= 3 ? `完美弹反 x${this.stats.streak}` : '完美弹反',
+                '#fcd34d',
+                20
+            );
+
+            this.hitstop = (step.type === 'heavy' || step.type === 'slam' || step.type === 'thrust') ? 0.08 : 0.055;
+            this.shake(step.type === 'heavy' || step.type === 'slam' ? 0.3 : 0.18, 0.14);
+
+            // 完美弹反永不掉血、永不崩架势（最高锁在 99%）
+            p.posture = Math.min(p.maxPosture - 1, p.posture + step.postureDmg * 0.36);
+            p.postureRegenDelay = 1.1;
+            const knock = (step.type === 'heavy' || step.type === 'slam') ? 5.6 : 2.8;
+            p.vx = -dirToBoss.x * knock;
+            p.vz = -dirToBoss.z * knock;
+
+            const bossPosDmg = (step.type === 'heavy' || step.type === 'slam') ? 22 : (step.type === 'thrust' ? 26 : 15);
+            this._damageBossPosture(bossPosDmg);
+            this._updateHUD();
+            return true;
+        }
+
+        // 5. 【普通格挡 Block】
+        const canBlock = step.type !== 'sweep' && step.type !== 'thrust';
+        if (canBlock && p.isGuarding) {
+            this.stats.blocks++;
+            this.stats.streak = 0;
+
+            this.audio.playBlock(false);
+            this.vfx.spawnDeflectSparks(clashPos, false);
+            this.spawnFloatTag(new THREE.Vector3(p.x, p.y + 2.1, p.z), this.charmless ? '格挡(削血)' : '格挡', '#fb923c', 16);
+
+            this.hitstop = 0.04;
+            this.shake(0.16, 0.12);
+            p.vx = -dirToBoss.x * 4.8;
+            p.vz = -dirToBoss.z * 4.8;
+            p.postureRegenDelay = 1.4;
+
+            if (this.charmless || step.type === 'wave') {
+                const chip = step.dmg * (step.type === 'wave' ? 0.45 : 0.32);
+                p.hp = Math.max(1, p.hp - chip);
+            }
+
+            p.posture += step.postureDmg * 1.15;
+            if (p.posture >= p.maxPosture) {
+                p.posture = p.maxPosture;
+                p.state = 'posture_broken';
+                p.stateTimer = 0.95;
+                p.isGuarding = false;
+                this.audio.playPostureBreak(false);
+                this.shake(0.4, 0.25);
+                this.spawnFloatTag(new THREE.Vector3(p.x, 2.35, p.z), '架势崩坏！', '#ef4444', 24);
+            }
+            this._updateHUD();
+            return true;
+        }
+
+        // 6. 【直接受击】
+        this.stats.streak = 0;
+        this.audio.playHitFlesh(step.type !== 'normal');
+        this.vfx.spawnBlood(new THREE.Vector3(p.x, p.y + 1.25, p.z), dirToBoss.clone().negate(), 26);
+        this.hitstop = 0.075;
+        this.shake(0.38, 0.22);
+        this._triggerFlash('rgba(153, 27, 27, 0.38)');
+
+        p.hp = Math.max(0, p.hp - step.dmg);
+        p.posture = Math.min(p.maxPosture, p.posture + step.postureDmg * 0.7);
+        p.postureRegenDelay = 1.6;
+        p.isGuarding = false;
+        p.state = 'hitstun';
+        p.stateTimer = 0.34;
+        p.vx = -dirToBoss.x * 7.2;
+        p.vz = -dirToBoss.z * 7.2;
+
+        if (p.hp <= 0) this._handlePlayerDeath();
+        this._updateHUD();
+        return true;
+    }
+
+    _damageBossPosture(amount) {
+        const b = this.boss;
+        if (b.state === 'posture_broken' || b.state === 'deathblow_victim' || b.state === 'dead') return;
+        b.posture = Math.min(b.maxPosture, b.posture + amount);
+        b.postureRegenDelay = 1.65;
+        if (b.posture >= b.maxPosture) this._breakBossPosture();
+    }
+
+    _breakBossPosture() {
+        const b = this.boss;
+        b.posture = b.maxPosture;
+        b.state = 'posture_broken';
+        b.stateTimer = 3.4;
+        b.currentMove = null;
+        this.audio.playPostureBreak(true);
+        this.hitstop = 0.1;
+        this.shake(0.42, 0.25);
+        this.spawnFloatTag(new THREE.Vector3(b.x, 2.5, b.z), '架势崩坏 · 速按斩击忍杀！', '#ff3b30', 22);
+    }
+
+    _handlePlayerDeath() {
+        const p = this.player;
+        p.state = 'dead';
+        p.vx = 0; p.vz = 0;
+        this.audio.playDeathblow();
+        this.shake(0.5, 0.35);
+
+        if (p.resurrects > 0) {
+            this.mode = 'resurrect_wait';
+            document.getElementById('resurrect-prompt').classList.remove('hidden');
+        } else {
+            this.mode = 'defeat';
+            this.showKanji('死', '犹豫，就会败北', '#b91c1c', 2400);
+            setTimeout(() => this._showEndModal(false), 1600);
+        }
+    }
+
+    triggerResurrect() {
+        if (this.mode !== 'resurrect_wait') return;
+        const p = this.player;
+        p.resurrects--;
+        p.hp = Math.round(p.maxHp * 0.55);
+        p.posture = 0;
+        p.state = 'idle';
+        p.invulnTimer = 1.25;
+        this.mode = 'playing';
+        document.getElementById('resurrect-prompt').classList.add('hidden');
+
+        // 震退近身的一心
+        const dir = new THREE.Vector3();
+        const dist = this._vecToBoss(dir);
+        if (dist < 5.5) {
+            this.boss.vx = dir.x * 8.5;
+            this.boss.vz = dir.z * 8.5;
+            this.boss.state = 'idle';
+            this.boss.currentMove = null;
+            this.boss.aiCooldown = 0.85;
+        }
+
+        this.audio.playHeal();
+        this.vfx.spawnSakura(new THREE.Vector3(p.x, 1.2, p.z), 42, 0xfda4af);
+        this.showKanji('回生', 'RESURRECTION', '#f472b6', 900);
+        this._updateHUD();
+    }
+
+    /* ----------------------------------------------------------------------
+     * Boss 3D AI 决策与状态推进
+     * ---------------------------------------------------------------------- */
+    _startBossMove(moveKey) {
+        const move = this.getBossMoveSet()[moveKey];
+        if (!move) return;
+        this.boss.state = 'attack';
+        this.boss.currentMove = move;
+        this._initBossStep(0);
+    }
+
+    _initBossStep(idx) {
+        const b = this.boss;
+        const step = b.currentMove.steps[idx];
+        b.moveStep = idx;
+        b.stepTimer = step.windup + step.active + step.recover;
+        b.stepHitDealt = false;
+        b.flashTriggered = false;
+
+        const dir = new THREE.Vector3(this.player.x - b.x, 0, this.player.z - b.z).normalize();
+        b.yaw = Math.atan2(dir.x, dir.z);
+
+        // 跃空重劈起跳！
+        if (step.jumpVel) {
+            b.vy = step.jumpVel;
+            b.vx = dir.x * 7.5;
+            b.vz = dir.z * 7.5;
+        }
+
+        // 危技警报
+        if (step.type === 'thrust' || step.type === 'sweep') {
+            this.audio.playPerilous();
+            this.showKanji('危', step.type === 'thrust' ? '突刺 · 识破' : '横扫 · 跳踩', '#ff2a32', 520);
+        }
+    }
+
+    _updateBoss(dt) {
+        const b = this.boss;
+        const p = this.player;
+        const toPlayer = new THREE.Vector3(p.x - b.x, 0, p.z - b.z);
+        const dist = toPlayer.length();
+        const dirToP = dist > 0.001 ? toPlayer.clone().divideScalar(dist) : new THREE.Vector3(0, 0, 1);
+
+        // 架势条恢复（血越低恢复越慢）
+        if (b.postureRegenDelay > 0) {
+            b.postureRegenDelay -= dt;
+        } else if (b.posture > 0 && b.state !== 'posture_broken' && b.state !== 'deathblow_victim') {
+            const hpRatio = b.hp / b.maxHp;
+            const rate = hpRatio > 0.75 ? 11 : (hpRatio > 0.5 ? 6.5 : (hpRatio > 0.25 ? 2.5 : 0.4));
+            b.posture = Math.max(0, b.posture - rate * dt);
+        }
+
+        // 3D 重力与平面阻尼
+        if (b.y > 0 || b.vy > 0) {
+            b.vy -= 26 * dt;
+            b.y += b.vy * dt;
+            if (b.y <= 0) { b.y = 0; b.vy = 0; }
+        }
+        b.x += b.vx * dt;
+        b.z += b.vz * dt;
+        b.vx *= Math.pow(0.006, dt);
+        b.vz *= Math.pow(0.006, dt);
+        this._clampToArena(b);
+
+        if (b.state === 'dead' || b.state === 'deathblow_victim') return;
+
+        if (b.state === 'phase_transition') {
+            b.stateTimer -= dt;
+            if (b.stateTimer <= 0) { b.state = 'idle'; b.aiCooldown = 0.45; }
+            return;
+        }
+        if (b.state === 'posture_broken') {
+            b.stateTimer -= dt;
+            if (b.stateTimer <= 0) {
+                b.posture = b.maxPosture * 0.65;
+                b.state = 'idle';
+                b.aiCooldown = 0.4;
+            }
+            return;
+        }
+        if (b.state === 'guard_stun') {
+            b.stateTimer -= dt;
+            if (b.stateTimer <= 0) { b.state = 'idle'; b.aiCooldown = 0.25; }
+            return;
+        }
+
+        if (b.state === 'attack' && b.currentMove) {
+            const step = b.currentMove.steps[b.moveStep];
+            const total = step.windup + step.active + step.recover;
+            const elapsed = total - b.stepTimer;
+            b.stepTimer -= dt;
+
+            // 前摇期轻微追踪玩家朝向
+            if (elapsed < step.windup * 0.85) {
+                b.yaw = Math.atan2(dirToP.x, dirToP.z);
+            }
+
+            // 十字斩/龙闪星芒闪光提示！
+            if (step.flashAt && !b.flashTriggered && elapsed >= step.flashAt) {
+                b.flashTriggered = true;
+                this.audio.playCrossFlash();
+                const glintPos = new THREE.Vector3(b.x, 1.15, b.z).addScaledVector(dirToP, 0.35);
+                this.vfx.spawnCrossGlint(glintPos);
+            }
+
+            // 活跃攻击判定帧
+            if (elapsed >= step.windup && !b.stepHitDealt) {
+                b.stepHitDealt = true;
+                const fwd = new THREE.Vector3(Math.sin(b.yaw), 0, Math.cos(b.yaw));
+                b.vx = fwd.x * step.lunge;
+                b.vz = fwd.z * step.lunge;
+                this.audio.playSwing(step.type !== 'normal');
+
+                // 立体 3D 刀光弧面
+                const arcOrigin = new THREE.Vector3(b.x, step.type === 'sweep' ? 0.45 : 1.32, b.z);
+                const arcColor = step.type === 'sweep' ? 0xffb380 : (step.type === 'heavy' || step.type === 'slam' ? 0xfef3c7 : 0xe2e8f0);
+                this.vfx.spawnSlashArc(arcOrigin, b.yaw, step.tilt || 0, step.type === 'sweep' ? 2.5 : 2.1, arcColor, step.type === 'heavy' ? 0.42 : 0.28);
+
+                // 二阶段龙闪 3D 剑气
+                if (step.type === 'wave') {
+                    const startP = new THREE.Vector3(b.x + fwd.x * 1.1, 1.3, b.z + fwd.z * 1.1);
+                    this.projectiles.push(new DragonFlash3D(this.scene, startP, fwd));
+                }
+
+                // 近战判定（距离 + 前方扇形角）
+                const curVec = new THREE.Vector3(p.x - b.x, 0, p.z - b.z);
+                const curDist = curVec.length();
+                const facingDot = curDist > 0.01 ? curVec.divideScalar(curDist).dot(fwd) : 1;
+                if (curDist <= step.range && (step.type === 'sweep' || facingDot > 0.15)) {
+                    this._resolveBossAttackHit(step, false);
+                }
+            }
+
+            if (b.stepTimer <= 0) {
+                if (b.moveStep + 1 < b.currentMove.steps.length) {
+                    this._initBossStep(b.moveStep + 1);
+                } else {
+                    b.currentMove = null;
+                    b.state = 'idle';
+                    b.aiCooldown = b.phase === 2 ? (0.36 + Math.random() * 0.42) : (0.55 + Math.random() * 0.62);
+                }
+            }
+            return;
+        }
+
+        // Idle / Stalk 压迫逼近
+        b.yaw = Math.atan2(dirToP.x, dirToP.z);
+        b.aiCooldown -= dt;
+
+        if (dist > 3.2) {
+            b.state = 'stalk';
+            const spd = b.phase === 2 ? 4.4 : 3.5;
+            b.vx = dirToP.x * spd;
+            b.vz = dirToP.z * spd;
+        } else {
+            b.state = 'idle';
+        }
+
+        if (b.aiCooldown <= 0 && p.state !== 'dead') {
+            const r = Math.random();
+            if (dist < 3.8) {
+                if (b.phase === 2) {
+                    if (r < 0.28) this._startBossMove('phase2Flurry');
+                    else if (r < 0.46) this._startBossMove('tripleSlash');
+                    else if (r < 0.62) this._startBossMove('perilousSweep');
+                    else if (r < 0.78) this._startBossMove('bumpThrust');
+                    else if (r < 0.90) this._startBossMove('jumpingSlam');
+                    else this._startBossMove('ashinaCross');
+                } else {
+                    if (r < 0.38) this._startBossMove('tripleSlash');
+                    else if (r < 0.58) this._startBossMove('bumpThrust');
+                    else if (r < 0.76) this._startBossMove('perilousSweep');
+                    else this._startBossMove('ashinaCross');
+                }
+            } else if (dist < 8.5) {
+                if (b.phase === 2 && r < 0.32) this._startBossMove('dragonFlash');
+                else if (b.phase === 2 && r < 0.58) this._startBossMove('jumpingSlam');
+                else if (r < 0.78) this._startBossMove('ashinaCross');
+                else this._startBossMove('perilousThrust');
+            } else {
+                if (b.phase === 2 && Math.random() < 0.55) this._startBossMove('dragonFlash');
+                else this._startBossMove('ashinaCross');
+            }
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * 玩家 3D 锁定绕圈移动与状态更新
+     * ---------------------------------------------------------------------- */
+    _updatePlayer(dt) {
+        const p = this.player;
+
+        if (p.deflectWindow > 0) p.deflectWindow = Math.max(0, p.deflectWindow - dt);
+        if (p.mikiriWindow > 0) p.mikiriWindow = Math.max(0, p.mikiriWindow - dt);
+        if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
+        if (p.guardSpamDecay > 0) {
+            p.guardSpamDecay -= dt;
+            if (p.guardSpamDecay <= 0) p.guardSpamCount = 0;
+        }
+        for (const k in this.inputBuffer) {
+            if (this.inputBuffer[k] > 0) this.inputBuffer[k] = Math.max(0, this.inputBuffer[k] - dt);
+        }
+
+        // 玩家架势恢复：按住防御且静止时速度提升 2.6 倍
+        if (p.postureRegenDelay > 0) {
+            p.postureRegenDelay -= dt;
+        } else if (p.posture > 0 && p.state !== 'posture_broken' && p.state !== 'dead') {
+            const hpRatio = p.hp / p.maxHp;
+            let rate = hpRatio > 0.75 ? 14 : (hpRatio > 0.5 ? 9 : (hpRatio > 0.25 ? 4.5 : 1.8));
+            if (p.state === 'guard' && Math.hypot(p.vx, p.vz) < 0.5) rate *= 2.6;
+            p.posture = Math.max(0, p.posture - rate * dt);
+        }
+
+        if (p.state === 'dead') return;
+
+        if (p.state === 'deathblow') {
+            p.stateTimer -= dt;
+            if (p.stateTimer <= 0) {
+                p.state = 'idle';
+                this._finishDeathblow();
+            }
+            return;
+        }
+
+        const toBoss = new THREE.Vector3();
+        this._vecToBoss(toBoss);
+        const rightVec = new THREE.Vector3(-toBoss.z, 0, toBoss.x);
+
+        if (p.state === 'attack') {
+            p.stateTimer -= dt;
+            const elapsed = p.attackDur - p.stateTimer;
+            if (elapsed >= 0.11 && !p.attackHitDealt) {
+                p.attackHitDealt = true;
+                this.vfx.spawnSlashArc(
+                    new THREE.Vector3(p.x, p.y + 1.28, p.z),
+                    p.yaw,
+                    p.comboStep === 1 ? -0.4 : 0.4,
+                    1.85,
+                    0xfff4d6,
+                    0.26
+                );
+                this._resolvePlayerAttackHit();
+            }
+            if (p.stateTimer <= 0) {
+                p.state = this.keys.guard ? 'guard' : 'idle';
+                p.isGuarding = this.keys.guard;
+            }
+        } else if (p.state === 'dodge' || p.state === 'hitstun' || p.state === 'posture_broken' || p.state === 'heal' || p.state === 'mikiri_anim') {
+            p.stateTimer -= dt;
+            if (p.stateTimer <= 0) {
+                p.state = this.keys.guard ? 'guard' : 'idle';
+                p.isGuarding = this.keys.guard;
+            }
+        } else if (p.state === 'jump') {
+            p.vy -= 26.5 * dt;
+            p.y += p.vy * dt;
+            const mv = new THREE.Vector3();
+            if (this.keys.fwd) mv.add(toBoss);
+            if (this.keys.back) mv.sub(toBoss);
+            if (this.keys.right) mv.add(rightVec);
+            if (this.keys.left) mv.sub(rightVec);
+            if (mv.lengthSq() > 0.01) {
+                mv.normalize();
+                p.vx = mv.x * 5.8;
+                p.vz = mv.z * 5.8;
+            }
+            if (p.y <= 0) {
+                p.y = 0; p.vy = 0;
+                p.state = this.keys.guard ? 'guard' : 'idle';
+                p.isGuarding = this.keys.guard;
+            }
+        } else {
+            // 锁定态 3D 走位（W/S 进退，A/D 围绕一心绕圈）
+            const mv = new THREE.Vector3();
+            if (this.keys.fwd) mv.add(toBoss);
+            if (this.keys.back) mv.sub(toBoss);
+            if (this.keys.right) mv.add(rightVec);
+            if (this.keys.left) mv.sub(rightVec);
+
+            p.yaw = Math.atan2(toBoss.x, toBoss.z);
+            if (this.keys.guard) {
+                p.state = 'guard';
+                p.isGuarding = true;
+                if (mv.lengthSq() > 0.01) {
+                    mv.normalize();
+                    p.vx = mv.x * 2.5;
+                    p.vz = mv.z * 2.5;
+                } else {
+                    p.vx *= Math.pow(0.001, dt);
+                    p.vz *= Math.pow(0.001, dt);
+                }
+            } else if (mv.lengthSq() > 0.01) {
+                mv.normalize();
+                p.state = 'move';
+                p.isGuarding = false;
+                p.vx = mv.x * 6.8;
+                p.vz = mv.z * 6.8;
+            } else {
+                p.state = 'idle';
+                p.isGuarding = false;
+                p.vx *= Math.pow(0.001, dt);
+                p.vz *= Math.pow(0.001, dt);
+            }
+        }
+
+        // 位置推进与阻尼
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+        if (p.state !== 'move' && p.state !== 'jump') {
+            p.vx *= Math.pow(0.004, dt);
+            p.vz *= Math.pow(0.004, dt);
+        }
+        this._clampToArena(p);
+
+        // 防止双人穿模
+        const dx = p.x - this.boss.x;
+        const dz = p.z - this.boss.z;
+        const sep = Math.hypot(dx, dz);
+        if (sep < 1.15 && sep > 0.001 && p.state !== 'jump' && p.state !== 'deathblow' && p.state !== 'mikiri_anim') {
+            const push = (1.15 - sep) * 0.5;
+            p.x += (dx / sep) * push;
+            p.z += (dz / sep) * push;
+            this.boss.x -= (dx / sep) * push;
+            this.boss.z -= (dz / sep) * push;
+        }
+
+        // 输入缓冲消耗
+        if (p.state === 'idle' || p.state === 'move' || p.state === 'guard') {
+            if (this.inputBuffer.deflect > 0) { this.inputBuffer.deflect = 0; this.triggerDeflectPress(); }
+            else if (this.inputBuffer.dodge > 0) { this.inputBuffer.dodge = 0; this.triggerDodgeOrMikiri(); }
+            else if (this.inputBuffer.jump > 0) { this.inputBuffer.jump = 0; this.triggerJumpOrStomp(); }
+            else if (this.inputBuffer.attack > 0) { this.inputBuffer.attack = 0; this.triggerAttack(); }
+        }
+    }
+
+    _clampToArena(ent) {
+        const r = Math.hypot(ent.x, ent.z);
+        if (r > this.ARENA_RADIUS) {
+            ent.x = (ent.x / r) * this.ARENA_RADIUS;
+            ent.z = (ent.z / r) * this.ARENA_RADIUS;
+        }
+    }
+
+    _updateProjectiles(dt) {
+        const p = this.player;
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const w = this.projectiles[i];
+            w.update(dt);
+            const dist = Math.hypot(w.group.position.x - p.x, w.group.position.z - p.z);
+            if (!w.hit && dist < 1.35 && p.y < 1.9) {
+                w.hit = true;
+                this._resolveBossAttackHit({ dmg: 26, postureDmg: 28, type: 'wave' }, true);
+                w.destroy();
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+            if (w.life <= 0) {
+                w.destroy();
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * 3D 动态芦苇荡、相机锁定与鼠标视角旋转更新
+     * ---------------------------------------------------------------------- */
+    _updateEnvironment(nowSec, dt) {
+        // 银色芦苇随夜风与角色踩踏/剑气物理摇曳
+        const dummy = this.reedDummy;
+        const px = this.player.x, pz = this.player.z;
+        const bx = this.boss.x, bz = this.boss.z;
+
+        for (let i = 0; i < this.reedCount; i++) {
+            const r = this.reedData[i];
+            let bendX = Math.sin(nowSec * 1.8 + r.phase + r.x * 0.25) * 0.22 + 0.12;
+            let bendZ = Math.cos(nowSec * 1.4 + r.phase + r.z * 0.25) * 0.16;
+
+            // 角色走过拨开周围芦苇
+            const dpSq = (r.x - px) * (r.x - px) + (r.z - pz) * (r.z - pz);
+            if (dpSq < 2.2) {
+                const f = (1 - dpSq / 2.2) * 0.65;
+                bendX += (r.x - px) * f;
+                bendZ += (r.z - pz) * f;
+            }
+            const dbSq = (r.x - bx) * (r.x - bx) + (r.z - bz) * (r.z - bz);
+            if (dbSq < 2.5) {
+                const f = (1 - dbSq / 2.5) * 0.72;
+                bendX += (r.x - bx) * f;
+                bendZ += (r.z - bz) * f;
+            }
+
+            dummy.position.set(r.x, 0, r.z);
+            dummy.rotation.set(bendZ, r.rotY, -bendX);
+            dummy.scale.set(1, r.scaleY, 1);
+            dummy.updateMatrix();
+            this.reedStalks.setMatrixAt(i, dummy.matrix);
+            this.reedPlumes.setMatrixAt(i, dummy.matrix);
+        }
+        this.reedStalks.instanceMatrix.needsUpdate = true;
+        this.reedPlumes.instanceMatrix.needsUpdate = true;
+
+        // 飘絮粒子缓慢漂移
+        const posAttr = this.fluffPoints.geometry.attributes.position;
+        for (let i = 0; i < posAttr.count; i++) {
+            let x = posAttr.getX(i) + dt * 0.9;
+            let y = posAttr.getY(i) + Math.sin(nowSec + i) * dt * 0.22;
+            if (x > 17) x = -17;
+            if (y < 0.3) y = 6.2;
+            posAttr.setXYZ(i, x, y, posAttr.getZ(i));
+        }
+        posAttr.needsUpdate = true;
+    }
+
+    _updateCamera(dt) {
+        // 支持 Q/E 键盘微调 3D 视角
+        if (this.keys.camLeft) this.camYawOffset -= dt * 1.8;
+        if (this.keys.camRight) this.camYawOffset += dt * 1.8;
+
+        const p = this.player;
+        const b = this.boss;
+
+        // 计算以狼->一心为基准的锁定机位，叠加用户的鼠标拖拽视角偏角！
+        const baseAngle = Math.atan2(p.x - b.x, p.z - b.z);
+        const finalYaw = baseAngle + this.camYawOffset;
+        const pitch = Math.max(0.06, Math.min(0.85, this.camPitchOffset));
+
+        this.camDist += (this.targetCamDist - this.camDist) * Math.min(1, dt * 6);
+
+        // 略微偏移右肩过肩构图，让一心与狼同时清晰入镜
+        const horiz = Math.cos(pitch) * this.camDist;
+        const desiredPos = new THREE.Vector3(
+            p.x + Math.sin(finalYaw) * horiz,
+            Math.max(0.95, p.y + 1.55 + Math.sin(pitch) * this.camDist),
+            p.z + Math.cos(finalYaw) * horiz
+        );
+
+        const desiredLook = new THREE.Vector3(
+            p.x * 0.35 + b.x * 0.65,
+            1.35 + b.y * 0.35,
+            p.z * 0.35 + b.z * 0.65
+        );
+
+        this.camCurrentPos.lerp(desiredPos, Math.min(1, dt * 8.5));
+        this.camLookTarget.lerp(desiredLook, Math.min(1, dt * 10));
+
+        // 震屏叠加
+        let sx = 0, sy = 0;
+        if (this.shakeTime > 0) {
+            this.shakeTime = Math.max(0, this.shakeTime - dt);
+            sx = (Math.random() - 0.5) * this.shakeMag;
+            sy = (Math.random() - 0.5) * this.shakeMag;
+        }
+
+        this.camera.position.set(this.camCurrentPos.x + sx, this.camCurrentPos.y + sy, this.camCurrentPos.z);
+        this.camera.lookAt(this.camLookTarget);
+    }
+
+    shake(mag, time) {
+        this.shakeMag = Math.max(this.shakeMag, mag);
+        this.shakeTime = Math.max(this.shakeTime, time);
+    }
+
+    /* ----------------------------------------------------------------------
+     * 3D -> 2D 投影 HUD（忍杀红点、浮字、架势血条实时同步）
+     * ---------------------------------------------------------------------- */
+    _projectToScreen(worldVec) {
+        this.tempVec.copy(worldVec).project(this.camera);
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        return {
+            x: (this.tempVec.x * 0.5 + 0.5) * w,
+            y: (-this.tempVec.y * 0.5 + 0.5) * h,
+            visible: this.tempVec.z < 1
+        };
+    }
+
+    spawnFloatTag(worldPos, text, color = '#fcd34d', size = 19) {
+        if (!this.showTimingHud) return;
+        const el = document.createElement('div');
+        el.className = 'float-tag';
+        el.textContent = text;
+        el.style.color = color;
+        el.style.fontSize = `${size}px`;
+        document.getElementById('float-layer').appendChild(el);
+        this.floatTags.push({
+            el,
+            pos: worldPos.clone(),
+            life: 0.78,
+            maxLife: 0.78
+        });
+    }
+
+    _clearFloatTags() {
+        for (const t of this.floatTags) t.el.remove();
+        this.floatTags = [];
+    }
+
+    _updateProjectedUI(dt) {
+        // 1. 忍杀红点 3D 锁定在一心胸口
+        const dot = document.getElementById('deathblow-dot');
+        if (this.boss.state === 'posture_broken') {
+            const chest = new THREE.Vector3();
+            this.bossRig.getChestWorldPos(chest);
+            const pt = this._projectToScreen(chest);
+            if (pt.visible) {
+                dot.style.display = 'flex';
+                dot.style.left = `${pt.x}px`;
+                dot.style.top = `${pt.y}px`;
+            } else {
+                dot.style.display = 'none';
+            }
+        } else {
+            dot.style.display = 'none';
+        }
+
+        // 2. 浮空战斗提示字
+        for (let i = this.floatTags.length - 1; i >= 0; i--) {
+            const t = this.floatTags[i];
+            t.life -= dt;
+            if (t.life <= 0) {
+                t.el.remove();
+                this.floatTags.splice(i, 1);
+                continue;
+            }
+            t.pos.y += dt * 1.15;
+            const pt = this._projectToScreen(t.pos);
+            t.el.style.left = `${pt.x}px`;
+            t.el.style.top = `${pt.y}px`;
+            t.el.style.opacity = Math.min(1, (t.life / t.maxLife) * 1.5);
+        }
+    }
+
+    _updateHUD() {
+        const b = this.boss;
+        const p = this.player;
+
+        // 顶部统计
+        document.getElementById('stat-deflects').textContent = this.stats.deflects;
+        document.getElementById('stat-mikiri').textContent = this.stats.mikiri;
+        document.getElementById('stat-streak').textContent = this.stats.streak;
+        document.getElementById('heal-count-btn').textContent = p.heals;
+
+        // Boss 血条与忍杀红点
+        document.getElementById('boss-hp-fill').style.width = `${(b.hp / b.maxHp) * 100}%`;
+        document.getElementById('boss-name-label').textContent = b.phase === 2 ? '剑圣 苇名一心 · 真意' : '剑圣 苇名一心';
+        document.getElementById('boss-orb-0').style.opacity = b.deathblowsLeft >= 1 ? '1' : '0.18';
+        document.getElementById('boss-orb-1').style.opacity = b.deathblowsLeft >= 2 ? '1' : '0.18';
+
+        // Boss 架势条
+        const bPosRatio = b.posture / b.maxPosture;
+        const bPosFill = document.getElementById('boss-posture-fill');
+        const bPosWrap = document.getElementById('boss-posture-wrap');
+        bPosFill.style.width = `${bPosRatio * 100}%`;
+        bPosFill.style.backgroundColor = bPosRatio > 0.8 ? '#ef4444' : (bPosRatio > 0.55 ? '#f97316' : '#eab308');
+        bPosWrap.classList.toggle('posture-critical', bPosRatio > 0.78);
+
+        // 玩家血条与回生
+        document.getElementById('player-hp-fill').style.width = `${(p.hp / p.maxHp) * 100}%`;
+        const resEl = document.getElementById('player-res-label');
+        resEl.textContent = p.resurrects > 0 ? '🌸 回生可用' : '✕ 回生已竭';
+        resEl.className = `text-xs sm:text-sm mb-1 drop-shadow ${p.resurrects > 0 ? 'text-pink-300' : 'text-stone-500'}`;
+
+        // 玩家架势条
+        const pPosRatio = p.posture / p.maxPosture;
+        const pPosWrap = document.getElementById('player-posture-wrap');
+        const pPosFill = document.getElementById('player-posture-fill');
+        pPosWrap.style.opacity = p.posture > 0.5 ? '1' : '0';
+        pPosFill.style.width = `${pPosRatio * 100}%`;
+        pPosFill.style.backgroundColor = pPosRatio > 0.8 ? '#ef4444' : (pPosRatio > 0.55 ? '#f97316' : '#eab308');
+        pPosWrap.classList.toggle('posture-critical', pPosRatio > 0.78);
+    }
+
+    _triggerFlash(bgColor) {
+        const el = document.getElementById('screen-flash');
+        el.style.background = bgColor;
+        el.style.opacity = '1';
+        clearTimeout(this._flashTimer);
+        this._flashTimer = setTimeout(() => { el.style.opacity = '0'; }, 95);
+    }
+
+    showKanji(char, subtext, color = '#dc2626', duration = 1000) {
+        const kEl = document.getElementById('big-kanji');
+        const sEl = document.getElementById('big-subtext');
+        kEl.textContent = char;
+        kEl.style.color = color;
+        sEl.textContent = subtext || '';
+        kEl.classList.remove('show');
+        sEl.style.opacity = '0';
+        void kEl.offsetWidth;
+        kEl.classList.add('show');
+        sEl.style.opacity = '1';
+
+        clearTimeout(this._kanjiTimeout);
+        this._kanjiTimeout = setTimeout(() => {
+            kEl.classList.remove('show');
+            sEl.style.opacity = '0';
+        }, duration);
+    }
+
+    _showEndModal(isVictory) {
+        const modal = document.getElementById('overlay-modal');
+        const title = document.getElementById('modal-title');
+        const sub = document.getElementById('modal-subtitle');
+        const resStats = document.getElementById('result-stats');
+
+        title.textContent = isVictory ? '死斗终结 · 剑圣陨落' : '死 · 败于剑圣之下';
+        title.className = `font-calligraphy text-4xl sm:text-5xl tracking-widest drop-shadow ${isVictory ? 'text-amber-400' : 'text-red-500'}`;
+        sub.textContent = isVictory
+            ? '「干得好，只狼……永别了。」'
+            : '「犹豫，就会败北。」听准刀剑交鸣的节奏，再战一回！';
+
+        const totalGuard = this.stats.deflects + this.stats.blocks;
+        const rate = totalGuard > 0 ? Math.round((this.stats.deflects / totalGuard) * 100) : 0;
+        document.getElementById('res-deflects').textContent = this.stats.deflects;
+        document.getElementById('res-rate').textContent = `${rate}%`;
+        document.getElementById('res-counters').textContent = this.stats.mikiri + this.stats.stomps;
+        document.getElementById('res-time').textContent = `${this.stats.elapsed.toFixed(1)}s`;
+
+        resStats.classList.remove('hidden');
+        document.getElementById('btn-start-game').textContent = '⚔️ 再次拔刀迎战';
+        document.getElementById('btn-resume-game').classList.add('hidden');
+        modal.classList.remove('hidden');
+    }
+
+    startNewMatch() {
+        this.audio.init();
+        this.charmless = document.getElementById('toggle-charmless').checked;
+        this.showTimingHud = document.getElementById('toggle-timing-hud').checked;
+        document.getElementById('charm-badge').classList.toggle('hidden', !this.charmless);
+        document.getElementById('overlay-modal').classList.add('hidden');
+        document.getElementById('resurrect-prompt').classList.add('hidden');
+
+        this.resetMatchState();
+        this.mode = 'playing';
+        this.audio.playCrossFlash();
+        this.showKanji('參上', '3D 剑圣 · 苇名一心', '#e2e8f0', 1050);
+    }
+
+    /* ----------------------------------------------------------------------
+     * 主循环 Tick
+     * ---------------------------------------------------------------------- */
+    tick(rawDt, nowSec) {
+        const dt = Math.min(rawDt, 0.05);
+
+        this._updateEnvironment(nowSec, dt);
+
+        if (this.mode === 'playing') {
+            this.stats.elapsed += dt;
+
+            if (this.hitstop > 0) {
+                this.hitstop -= dt;
+                this.vfx.update(dt * 0.2, this.camera.position);
+            } else {
+                let simDt = dt;
+                if (this.slowMoTimer > 0) {
+                    this.slowMoTimer -= dt;
+                    simDt = dt * 0.34;
+                }
+                this._updatePlayer(simDt);
+                this._updateBoss(simDt);
+                this._updateProjectiles(simDt);
+                this.vfx.update(simDt, this.camera.position);
+                this._updateHUD();
+            }
+        } else {
+            // 菜单或结算界面：缓慢环绕欣赏月夜芦苇荡
+            if (this.mode === 'menu') this.camYawOffset += dt * 0.14;
+            this.vfx.update(dt * 0.5, this.camera.position);
+        }
+
+        // 更新 3D 骨骼模型、相机与屏幕投影 UI
+        this.playerRig.updateAnimation(this.player, dt, nowSec);
+        this.bossRig.updateAnimation(this.boss, dt, nowSec);
+        this._updateCamera(dt);
+        this._updateProjectedUI(dt);
+
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    /* ----------------------------------------------------------------------
+     * 窗口自适应与完整事件监听（键盘、鼠标战斗+鼠标拖拽调视角、移动端触屏）
+     * ---------------------------------------------------------------------- */
+    _resize() {
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        this.renderer.setSize(w, h, false);
+        this.camera.aspect = w / h;
+        this.camera.updateProjectionMatrix();
+    }
+
+    _bindEvents() {
+        window.addEventListener('resize', () => this._resize());
+
+        // 键盘控制
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const c = e.code;
+
+            if (this.mode === 'resurrect_wait' && (c === 'Space' || c === 'Enter')) {
+                e.preventDefault();
+                this.triggerResurrect();
+                return;
+            }
+            if (c === 'Escape') {
+                if (this.mode === 'playing') this._openGuideModal();
+                else if (this.mode === 'paused') this._closeGuideModal();
+                return;
+            }
+            if (this.mode !== 'playing') return;
+
+            if (c === 'KeyW' || c === 'ArrowUp') this.keys.fwd = true;
+            if (c === 'KeyS' || c === 'ArrowDown') this.keys.back = true;
+            if (c === 'KeyA' || c === 'ArrowLeft') this.keys.left = true;
+            if (c === 'KeyD' || c === 'ArrowRight') this.keys.right = true;
+            if (c === 'KeyQ') this.keys.camLeft = true;
+            if (c === 'KeyE') this.keys.camRight = true;
+            if (c === 'KeyC') { this.camYawOffset = 0.24; this.camPitchOffset = 0.22; }
+
+            if (c === 'KeyJ') this.triggerAttack();
+            if (c === 'KeyK') this.triggerDeflectPress();
+            if (c === 'ShiftLeft' || c === 'ShiftRight' || c === 'KeyL') {
+                e.preventDefault();
+                this.triggerDodgeOrMikiri();
+            }
+            if (c === 'Space') {
+                e.preventDefault();
+                this.triggerJumpOrStomp();
+            }
+            if (c === 'KeyR') this.triggerHeal();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const c = e.code;
+            if (c === 'KeyW' || c === 'ArrowUp') this.keys.fwd = false;
+            if (c === 'KeyS' || c === 'ArrowDown') this.keys.back = false;
+            if (c === 'KeyA' || c === 'ArrowLeft') this.keys.left = false;
+            if (c === 'KeyD' || c === 'ArrowRight') this.keys.right = false;
+            if (c === 'KeyQ') this.keys.camLeft = false;
+            if (c === 'KeyE') this.keys.camRight = false;
+            if (c === 'KeyK') this.triggerDeflectRelease();
+        });
+
+        // 鼠标交互：零延迟左键攻击、右键弹反/防御，同时支持 mousedown/mousemove/mouseup 自由旋转 3D 视角！
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        this.canvas.addEventListener('mousedown', (e) => {
+            this.audio.init();
+            this.isMouseDown = true;
+            this.dragButton = e.button;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+
+            if (this.mode !== 'playing') return;
+            // 按住 Alt 拖动或中键拖动时仅旋转相机，不触发出刀
+            if (e.button === 0 && !e.altKey) this.triggerAttack();
+            else if (e.button === 2) this.triggerDeflectPress();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!this.isMouseDown) return;
+            const dx = e.clientX - this.lastMouseX;
+            const dy = e.clientY - this.lastMouseY;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+
+            this.camYawOffset -= dx * 0.0065;
+            this.camPitchOffset = Math.max(0.06, Math.min(0.85, this.camPitchOffset + dy * 0.0045));
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            this.isMouseDown = false;
+            if (e.button === 2) this.triggerDeflectRelease();
+        });
+
+        // 画布滚轮可微调机位远近
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            this.targetCamDist = Math.max(4.2, Math.min(10.5, this.targetCamDist + e.deltaY * 0.004));
+        }, { passive: false });
+
+        // 弹窗与顶栏按钮
+        document.getElementById('btn-start-game').addEventListener('click', () => this.startNewMatch());
+        document.getElementById('btn-resume-game').addEventListener('click', () => this._closeGuideModal());
+        document.getElementById('btn-restart-top').addEventListener('click', () => this.startNewMatch());
+        document.getElementById('btn-guide').addEventListener('click', () => {
+            if (this.mode === 'playing') this._openGuideModal();
+        });
+        document.getElementById('btn-sound').addEventListener('click', () => {
+            this.audio.init();
+            this.audio.setEnabled(!this.audio.enabled);
+            document.getElementById('sound-icon').textContent = this.audio.enabled ? '🔊' : '🔇';
+        });
+        document.getElementById('btn-resurrect').addEventListener('click', () => this.triggerResurrect());
+        document.getElementById('btn-giveup').addEventListener('click', () => {
+            document.getElementById('resurrect-prompt').classList.add('hidden');
+            this.mode = 'defeat';
+            this._showEndModal(false);
+        });
+
+        // 底部控制按钮（兼顾鼠标点击与手机触屏按住）
+        const bindHold = (id, onDown, onUp) => {
+            const el = document.getElementById(id);
+            const down = (e) => {
+                e.preventDefault();
+                this.audio.init();
+                el.classList.add('active-press');
+                onDown();
+            };
+            const up = (e) => {
+                e.preventDefault();
+                el.classList.remove('active-press');
+                if (onUp) onUp();
+            };
+            el.addEventListener('mousedown', down);
+            el.addEventListener('mouseup', up);
+            el.addEventListener('mouseleave', up);
+            el.addEventListener('touchstart', down, { passive: false });
+            el.addEventListener('touchend', up, { passive: false });
+            el.addEventListener('touchcancel', up, { passive: false });
+        };
+
+        bindHold('ctrl-left', () => { this.keys.left = true; }, () => { this.keys.left = false; });
+        bindHold('ctrl-right', () => { this.keys.right = true; }, () => { this.keys.right = false; });
+        bindHold('ctrl-fwd', () => { this.keys.fwd = true; }, () => { this.keys.fwd = false; });
+        bindHold('ctrl-back', () => { this.keys.back = true; }, () => { this.keys.back = false; });
+        bindHold('ctrl-attack', () => this.triggerAttack());
+        bindHold('ctrl-deflect', () => this.triggerDeflectPress(), () => this.triggerDeflectRelease());
+        bindHold('ctrl-dodge', () => this.triggerDodgeOrMikiri());
+        bindHold('ctrl-jump', () => this.triggerJumpOrStomp());
+        bindHold('ctrl-heal', () => this.triggerHeal());
+        bindHold('ctrl-cam-reset', () => {
+            this.camYawOffset = 0.24;
+            this.camPitchOffset = 0.22;
+            this.targetCamDist = 6.2;
+        });
+    }
+
+    _openGuideModal() {
+        this.mode = 'paused';
+        document.getElementById('result-stats').classList.add('hidden');
+        document.getElementById('modal-title').textContent = '3D 苇名流 · 拼刀秘传';
+        document.getElementById('modal-title').className = 'font-calligraphy text-4xl sm:text-5xl text-stone-100 tracking-widest drop-shadow';
+        document.getElementById('btn-start-game').textContent = '↺ 重新开始';
+        document.getElementById('btn-resume-game').classList.remove('hidden');
+        document.getElementById('overlay-modal').classList.remove('hidden');
+    }
+
+    _closeGuideModal() {
+        this.charmless = document.getElementById('toggle-charmless').checked;
+        this.showTimingHud = document.getElementById('toggle-timing-hud').checked;
+        document.getElementById('charm-badge').classList.toggle('hidden', !this.charmless);
+        document.getElementById('overlay-modal').classList.add('hidden');
+        this.mode = 'playing';
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * 6. window.onload 启动 3D 渲染与战斗主循环
+ * -------------------------------------------------------------------------- */
+window.onload = function () {
+    const game = new Sekiro3DGame();
+    let lastTime = performance.now();
+
+    function animate(now) {
+        const dt = (now - lastTime) / 1000;
+        lastTime = now;
+        game.tick(dt, now / 1000);
+        requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+};
+</script>
+</body>
+</html>
